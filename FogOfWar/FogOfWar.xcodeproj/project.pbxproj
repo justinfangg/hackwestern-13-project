@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5C47964130B2157000A9DDA6 /* FogKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5C47964030B2157000A9DDA6 /* FogKit */; };
+		A1A0000130B2157000A9DDA6 /* SwiftyH3 in Frameworks */ = {isa = PBXBuildFile; productRef = A1A0000230B2157000A9DDA6 /* SwiftyH3 */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5C47964130B2157000A9DDA6 /* FogKit in Frameworks */,
+				A1A0000130B2157000A9DDA6 /* SwiftyH3 in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,6 +73,7 @@
 			name = FogOfWar;
 			packageProductDependencies = (
 				5C47964030B2157000A9DDA6 /* FogKit */,
+				A1A0000230B2157000A9DDA6 /* SwiftyH3 */,
 			);
 			productName = FogOfWar;
 			productReference = 5C47962630B2156F00A9DDA6 /* FogOfWar.app */;
@@ -102,6 +105,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				5C47963F30B2157000A9DDA6 /* XCLocalSwiftPackageReference "../Packages/FogKit" */,
+				A1A0000330B2157000A9DDA6 /* XCRemoteSwiftPackageReference "SwiftyH3" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5C47962730B2156F00A9DDA6 /* Products */;
@@ -351,10 +355,26 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A1A0000330B2157000A9DDA6 /* XCRemoteSwiftPackageReference "SwiftyH3" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pawelmajcher/SwiftyH3.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		5C47964030B2157000A9DDA6 /* FogKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FogKit;
+		};
+		A1A0000230B2157000A9DDA6 /* SwiftyH3 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1A0000330B2157000A9DDA6 /* XCRemoteSwiftPackageReference "SwiftyH3" */;
+			productName = SwiftyH3;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

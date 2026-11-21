@@ -1,28 +1,39 @@
 import MapKit
-import QuartzCore
+import SwiftUI
 import UIKit
 
-/// Map-only adapter for Vishaal's eventual shared `Quest` model. Keeping this
-/// DTO free of backend fields lets the map compile and demo independently.
+/// Map-only adapter for the shared `Quest` model. Keeping this DTO free of
+/// backend fields lets the map compile and demo independently.
 struct QuestMarkerData: Identifiable, Equatable {
+    enum Status: Equatable {
+        /// Yellow/orange beacon: quest still to find.
+        case active
+        /// Green beacon: collected today.
+        case completed
+    }
+
     let id: String
     var coordinate: CLLocationCoordinate2D
+    /// Short label for the map pill, e.g. "Tree".
     var title: String
     var subtitle: String?
-    var systemImageName: String
+    var participantCount: Int
+    var status: Status
 
     init(
         id: String,
         coordinate: CLLocationCoordinate2D,
         title: String,
         subtitle: String? = nil,
-        systemImageName: String = "flag.fill"
+        participantCount: Int = 0,
+        status: Status = .active
     ) {
         self.id = id
         self.coordinate = coordinate
         self.title = title
         self.subtitle = subtitle
-        self.systemImageName = systemImageName
+        self.participantCount = participantCount
+        self.status = status
     }
 
     static func == (lhs: QuestMarkerData, rhs: QuestMarkerData) -> Bool {
@@ -31,12 +42,13 @@ struct QuestMarkerData: Identifiable, Equatable {
             && lhs.coordinate.longitude == rhs.coordinate.longitude
             && lhs.title == rhs.title
             && lhs.subtitle == rhs.subtitle
-            && lhs.systemImageName == rhs.systemImageName
+            && lhs.participantCount == rhs.participantCount
+            && lhs.status == rhs.status
     }
 }
 
-/// Point annotation deliberately rendered by MapKit's annotation layer, which
-/// remains above an `.aboveLabels` fog overlay.
+/// Point annotation rendered by MapKit's annotation layer, which stays above
+/// the `.aboveLabels` cloud overlay.
 final class QuestAnnotation: NSObject, MKAnnotation {
     private(set) var markerData: QuestMarkerData
 
@@ -57,23 +69,22 @@ final class QuestAnnotation: NSObject, MKAnnotation {
         coordinate = data.coordinate
         title = data.title
         subtitle = data.subtitle
-        NotificationCenter.default.post(
-            name: .MKAnnotationCalloutInfoDidChange,
-            object: self
-        )
     }
 }
 
-/// A compact, game-like quest beacon. Required display priority, maximum z
-/// priority, no collision occlusion, and no clustering keep the quest visible
-/// over fog and ordinary MapKit labels at every supported zoom.
+/// The Figma quest goal: a glowing beacon (orange when active, green once
+/// collected) with a pill showing the quest name and how many explorers are on it.
 final class QuestAnnotationView: MKAnnotationView {
     static let reuseIdentifier = "QuestAnnotationView"
 
-    private let haloLayer = CAShapeLayer()
-    private let pointerLayer = CAShapeLayer()
-    private let markerBody = UIView()
-    private let iconView = UIImageView()
+    /// Figma pin frame and the beacon dot's center inside it.
+    private static let pinSize = CGSize(width: 92.8642, height: 95.0936)
+    private static let dotCenter = CGPoint(x: 46.2881, y: 46.2881)
+    /// Gap between the pill's bottom edge and the beacon's center (Figma: ~17-18 pt).
+    private static let pillLift: CGFloat = 17.5
+
+    private let pinView = UIImageView()
+    private let pillHost = UIHostingController(rootView: QuestMarkerPill(title: "", participantCount: 0, status: .active))
 
     override var annotation: MKAnnotation? {
         didSet { updateContent() }
@@ -89,129 +100,195 @@ final class QuestAnnotationView: MKAnnotationView {
         configure()
     }
 
-    override func prepareForReuse() {
-        super.prepareForReuse()
-        haloLayer.removeAllAnimations()
-        iconView.image = nil
-    }
-
     override func prepareForDisplay() {
         super.prepareForDisplay()
         updateContent()
-        installPulseAnimationIfNeeded()
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-
-        let haloFrame = CGRect(x: 5, y: 1, width: 54, height: 54)
-        haloLayer.frame = haloFrame
-        haloLayer.path = UIBezierPath(ovalIn: haloLayer.bounds).cgPath
-
-        markerBody.frame = CGRect(x: 11, y: 7, width: 42, height: 42)
-        markerBody.layer.cornerRadius = markerBody.bounds.width / 2
-        iconView.frame = markerBody.bounds.insetBy(dx: 9, dy: 9)
-
-        let pointerPath = UIBezierPath()
-        pointerPath.move(to: CGPoint(x: 25, y: 43))
-        pointerPath.addLine(to: CGPoint(x: 32, y: 62))
-        pointerPath.addLine(to: CGPoint(x: 39, y: 43))
-        pointerPath.close()
-        pointerLayer.path = pointerPath.cgPath
-    }
-
-    /// Refreshes SF Symbol/title state after an in-place annotation update.
+    /// Refreshes the pill after an in-place annotation update.
     func refresh() {
         updateContent()
     }
 
     private func configure() {
-        frame = CGRect(x: 0, y: 0, width: 64, height: 66)
-        centerOffset = CGPoint(x: 0, y: -31)
+        frame = CGRect(origin: .zero, size: Self.pinSize)
+        // Put the beacon dot (not the frame center) on the coordinate.
+        centerOffset = CGPoint(
+            x: Self.pinSize.width / 2 - Self.dotCenter.x,
+            y: Self.pinSize.height / 2 - Self.dotCenter.y
+        )
         backgroundColor = .clear
-        canShowCallout = true
+        canShowCallout = false
         displayPriority = .required
-        zPriority = .max
-        selectedZPriority = .max
+        zPriority = .defaultUnselected
         collisionMode = .none
         clusteringIdentifier = nil
 
-        haloLayer.fillColor = FogAppearance.default.questMarkerColor
-            .withAlphaComponent(0.16)
-            .cgColor
-        haloLayer.strokeColor = FogAppearance.default.questMarkerColor
-            .withAlphaComponent(0.5)
-            .cgColor
-        haloLayer.lineWidth = 1.2
-        layer.addSublayer(haloLayer)
+        pinView.frame = bounds
+        pinView.contentMode = .scaleToFill
+        addSubview(pinView)
 
-        pointerLayer.fillColor = FogAppearance.default.questMarkerColor.cgColor
-        pointerLayer.shadowColor = UIColor.black.cgColor
-        pointerLayer.shadowOpacity = 0.34
-        pointerLayer.shadowRadius = 4
-        pointerLayer.shadowOffset = CGSize(width: 0, height: 2)
-        layer.addSublayer(pointerLayer)
-
-        markerBody.backgroundColor = FogAppearance.default.questMarkerColor
-        markerBody.layer.borderColor = UIColor.white.withAlphaComponent(0.82).cgColor
-        markerBody.layer.borderWidth = 2
-        markerBody.layer.shadowColor = UIColor.black.cgColor
-        markerBody.layer.shadowOpacity = 0.38
-        markerBody.layer.shadowRadius = 8
-        markerBody.layer.shadowOffset = CGSize(width: 0, height: 3)
-        addSubview(markerBody)
-
-        iconView.contentMode = .scaleAspectFit
-        iconView.tintColor = UIColor(
-            red: 24.0 / 255.0,
-            green: 28.0 / 255.0,
-            blue: 35.0 / 255.0,
-            alpha: 1
-        )
-        markerBody.addSubview(iconView)
+        pillHost.view.backgroundColor = .clear
+        pillHost.view.isUserInteractionEnabled = false
+        pillHost.sizingOptions = .intrinsicContentSize
+        addSubview(pillHost.view)
 
         isAccessibilityElement = true
         accessibilityTraits = [.button]
         updateContent()
-        installPulseAnimationIfNeeded()
     }
 
     private func updateContent() {
-        guard let questAnnotation = annotation as? QuestAnnotation else {
-            iconView.image = UIImage(systemName: "flag.fill")
-            accessibilityLabel = "Quest"
-            return
-        }
+        guard let data = (annotation as? QuestAnnotation)?.markerData else { return }
 
-        let configuration = UIImage.SymbolConfiguration(pointSize: 19, weight: .bold)
-        iconView.image = UIImage(
-            systemName: questAnnotation.markerData.systemImageName,
-            withConfiguration: configuration
-        ) ?? UIImage(systemName: "flag.fill", withConfiguration: configuration)
+        pinView.image = UIImage(named: data.status == .completed ? "QuestPinCompleted" : "QuestPinActive")
+        pillHost.rootView = QuestMarkerPill(
+            title: data.title,
+            participantCount: data.participantCount,
+            status: data.status
+        )
 
-        accessibilityLabel = questAnnotation.markerData.title
-        accessibilityValue = questAnnotation.markerData.subtitle
+        let pillSize = pillHost.sizeThatFits(in: CGSize(width: 240, height: 60))
+        // Figma: the active pill hangs up-left of its beacon, the completed one up-right.
+        let originX = data.status == .completed
+            ? Self.dotCenter.x + 7
+            : Self.dotCenter.x - pillSize.width
+        pillHost.view.frame = CGRect(
+            x: originX,
+            y: Self.dotCenter.y - Self.pillLift - pillSize.height,
+            width: pillSize.width,
+            height: pillSize.height
+        )
+
+        accessibilityLabel = "\(data.title) quest"
+        accessibilityValue = data.participantCount == 1
+            ? "1 explorer"
+            : "\(data.participantCount) explorers"
     }
 
-    private func installPulseAnimationIfNeeded() {
-        haloLayer.removeAnimation(forKey: "quest-pulse")
-        guard !UIAccessibility.isReduceMotionEnabled else { return }
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        super.point(inside: point, with: event) || pillHost.view.frame.contains(point)
+    }
+}
 
-        let scale = CABasicAnimation(keyPath: "transform.scale")
-        scale.fromValue = 0.82
-        scale.toValue = 1.18
+/// Quest pill from Figma (node 26:2027): colored capsule, PT Sans 20 title,
+/// two-person glyph and participant count.
+struct QuestMarkerPill: View {
+    let title: String
+    let participantCount: Int
+    let status: QuestMarkerData.Status
 
-        let opacity = CABasicAnimation(keyPath: "opacity")
-        opacity.fromValue = 0.78
-        opacity.toValue = 0.16
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .lineLimit(1)
+            HStack(spacing: 2) {
+                Image("QuestParticipants")
+                    .resizable()
+                    .frame(width: 20, height: 16)
+                Text(participantCount, format: .number)
+                    .monospacedDigit()
+            }
+        }
+        .font(SideQuestDesign.ptSans(20))
+        .tracking(-0.6)
+        .foregroundStyle(SideQuestDesign.pillText)
+        .padding(.leading, 12)
+        .padding(.trailing, 14)
+        .frame(minWidth: 103, minHeight: 36)
+        .background(
+            status == .completed ? SideQuestDesign.questCompleted : SideQuestDesign.questActive,
+            in: .capsule
+        )
+        .fixedSize()
+    }
+}
 
-        let group = CAAnimationGroup()
-        group.animations = [scale, opacity]
-        group.duration = 1.55
-        group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        group.autoreverses = true
-        group.repeatCount = .infinity
-        group.isRemovedOnCompletion = false
-        haloLayer.add(group, forKey: "quest-pulse")
+/// The player's position: the Figma blue dot with its heading beam.
+final class UserLocationAnnotation: NSObject, MKAnnotation {
+    static let reuseIdentifier = "UserLocationAnnotationView"
+
+    @objc dynamic var coordinate: CLLocationCoordinate2D
+    let title: String? = "You"
+
+    init(coordinate: CLLocationCoordinate2D) {
+        self.coordinate = coordinate
+        super.init()
+    }
+}
+
+final class UserLocationAnnotationView: MKAnnotationView {
+    /// Figma "Pin" frame and the dot's center inside it.
+    private static let pinSize = CGSize(width: 92.5762, height: 94.7291)
+    private static let dotCenter = CGPoint(x: 46, y: 45.9235)
+    /// Bearing (degrees clockwise from north) the beam points at in the Figma asset.
+    private static let assetBeamBearing: CGFloat = 163
+
+    private let pinView = UIImageView(image: UIImage(named: "UserLocationPin"))
+    private var currentHeading: CGFloat?
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        configure()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configure()
+    }
+
+    private func configure() {
+        frame = CGRect(origin: .zero, size: Self.pinSize)
+        centerOffset = CGPoint(
+            x: Self.pinSize.width / 2 - Self.dotCenter.x,
+            y: Self.pinSize.height / 2 - Self.dotCenter.y
+        )
+        backgroundColor = .clear
+        canShowCallout = false
+        displayPriority = .required
+        zPriority = .max
+        collisionMode = .circle
+        clusteringIdentifier = nil
+
+        // Rotate the beam around the dot, not the frame center.
+        pinView.frame = bounds
+        pinView.layer.anchorPoint = CGPoint(
+            x: Self.dotCenter.x / Self.pinSize.width,
+            y: Self.dotCenter.y / Self.pinSize.height
+        )
+        pinView.layer.position = Self.dotCenter
+        addSubview(pinView)
+
+        isAccessibilityElement = true
+        accessibilityLabel = "Your location"
+    }
+
+    /// Points the beam along `bearing` (degrees clockwise from north).
+    func setHeading(_ bearing: CLLocationDirection?, animated: Bool) {
+        guard let bearing else { return }
+        let target = CGFloat(bearing)
+        // Unwrap so the beam always takes the short way round.
+        var next = target
+        if let currentHeading {
+            var delta = (target - currentHeading).truncatingRemainder(dividingBy: 360)
+            if delta > 180 { delta -= 360 }
+            if delta < -180 { delta += 360 }
+            next = currentHeading + delta
+        }
+        currentHeading = next
+        let radians = (next - Self.assetBeamBearing) * .pi / 180
+        let apply = { self.pinView.transform = CGAffineTransform(rotationAngle: radians) }
+        if animated, !UIAccessibility.isReduceMotionEnabled {
+            UIView.animate(
+                withDuration: 0.45,
+                delay: 0,
+                usingSpringWithDamping: 0.9,
+                initialSpringVelocity: 0,
+                options: [.beginFromCurrentState, .allowUserInteraction],
+                animations: apply
+            )
+        } else {
+            apply()
+        }
     }
 }

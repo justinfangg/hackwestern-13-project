@@ -89,8 +89,7 @@ struct DevHarnessView: View {
             id: quest.id.uuidString,
             coordinate: quest.target.clCoordinate,
             title: quest.title,
-            subtitle: quest.hint,
-            systemImageName: "star.fill"
+            subtitle: quest.hint
         )
     }
 
@@ -106,7 +105,7 @@ struct DevHarnessView: View {
             tileMath: tileMath,
             userCoordinate: (services.location.displayCoordinate
                              ?? services.location.currentCoordinate)?.clCoordinate,
-            questMarker: questMarker,
+            questMarkers: questMarker.map { [$0] } ?? [],
             routeSegments: activeRouteSegments,
             recenterToken: recenterToken,
             onMapTap: { _ in },
@@ -222,7 +221,7 @@ struct DevHarnessView: View {
 }
 
 /// Plain recap so the share export can be tested. Jonathan's designed card replaces this.
-private struct RecapSheet: View {
+struct RecapSheet: View {
     let summary: ExpeditionSummary
 
     var body: some View {

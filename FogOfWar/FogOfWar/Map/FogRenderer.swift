@@ -3,58 +3,35 @@ import MapKit
 import QuartzCore
 import UIKit
 
-/// Draws the entire fog system as one MapKit overlay. H3 work and coordinate
+/// Draws the cloud cover as one MapKit overlay. H3 work and coordinate
 /// conversion happen before geometry reaches this type; draw calls only query a
 /// spatial index and issue Core Graphics commands for the dirty map rectangle.
+///
+/// Layers per tile: a light haze, the blurred Figma cloud crowns (skipping any
+/// cloud whose center sits on explored ground), then a soft punch-out of every
+/// cleared H3 cell so walked paths are always readable.
 final class FogRenderer: MKOverlayRenderer {
-    /// Supplied by `FogMapView.Coordinator` so drifting fog invalidates only the
-    /// currently visible geography instead of the world overlay.
+    /// Supplied by `FogMapView.Coordinator`; used when a dirty rect is unknown.
     @MainActor var visibleMapRectProvider: (() -> MKMapRect?)?
 
-    @MainActor var atmosphericMotionEnabled = true {
-        didSet {
-            ensureDisplayLink()
-            displayLink?.isPaused = !atmosphericMotionEnabled && !hasActiveAnimations
-        }
-    }
-
     private let appearance: FogAppearance
+    private let atlas = CloudSpriteAtlas.shared
     private let stateLock = NSLock()
     private var clearedIndex = GeometrySpatialIndex()
     private var revealAnimations: [H3CellID: CellRevealAnimation] = [:]
     private var renderTime = CACurrentMediaTime()
-    private var lastAtmosphericInvalidation = CACurrentMediaTime()
+    private var lastDrawnCloudLevel = 0
 
-    private let primaryTexture: CGImage?
-    private let secondaryTexture: CGImage?
     private let clearingGradient: CGGradient?
     /// Soft circular mask for settled (fully revealed) cells. Drawn via `CGContext.draw`
-    /// instead of `drawRadialGradient`, which is cheaper when many cells are punched
-    /// every atmospheric redraw. Animating cells still use the live gradient.
+    /// instead of `drawRadialGradient`, which is cheaper when many cells are punched.
     private let settledClearMask: CGImage?
-    private let revealBloomGradient: CGGradient?
 
     private lazy var displayLinkProxy = FogDisplayLinkProxy(renderer: self)
     private var displayLink: CADisplayLink?
 
-    private var hasActiveAnimations: Bool {
-        stateLock.fogWithLock {
-            !revealAnimations.isEmpty
-        }
-    }
-
     init(overlay: MKOverlay, appearance: FogAppearance = .default) {
         self.appearance = appearance
-        primaryTexture = Self.makeAtmosphereTexture(
-            size: 256,
-            tint: (red: 116, green: 135, blue: 146),
-            seed: 0.73
-        )
-        secondaryTexture = Self.makeAtmosphereTexture(
-            size: 256,
-            tint: (red: 151, green: 163, blue: 168),
-            seed: 2.19
-        )
         clearingGradient = Self.makeGradient(
             colors: [
                 UIColor(white: 1, alpha: 1),
@@ -62,22 +39,20 @@ final class FogRenderer: MKOverlayRenderer {
                 UIColor(white: 1, alpha: 0.72),
                 UIColor(white: 1, alpha: 0)
             ],
-            locations: [0, 0.68, 0.82, 1]
+            locations: [0, 0.6, 0.8, 1]
         )
         settledClearMask = Self.makeSettledClearMask(size: 128)
-        revealBloomGradient = Self.makeGradient(
-            colors: [
-                appearance.tealGlowColor.withAlphaComponent(0.20),
-                appearance.tealGlowColor.withAlphaComponent(0.10),
-                appearance.tealGlowColor.withAlphaComponent(0)
-            ],
-            locations: [0, 0.46, 1]
-        )
         super.init(overlay: overlay)
     }
 
     deinit {
         displayLink?.invalidate()
+    }
+
+    /// Cloud level-of-detail most recently drawn; dispersal animations use the
+    /// same level so the clouds that fly away are the ones that were on screen.
+    var currentCloudLevel: Int {
+        stateLock.fogWithLock { lastDrawnCloudLevel }
     }
 
     /// Replaces the complete persisted cleared-cell snapshot without animating
@@ -90,29 +65,40 @@ final class FogRenderer: MKOverlayRenderer {
             revealAnimations.removeAll(keepingCapacity: true)
             return union(oldRect, clearedIndex.coveringMapRect)
         }
-
-        ensureDisplayLink()
-        invalidate(dirtyRect)
+        invalidate(expandedForClouds(dirtyRect, level: currentCloudLevel))
     }
 
     /// Incrementally adds newly cleared cells and schedules their presentation
-    /// animation. All cells are in the spatial index immediately, so persistence
-    /// and visual animation never disagree after an interruption.
+    /// animation. Returns the clouds that were visible before this reveal and
+    /// are now on explored ground, so the caller can animate them away.
     @MainActor
+    @discardableResult
     func reveal(
         _ geometries: [CellGeometry],
         origin: CLLocationCoordinate2D,
         radiusMeters: CLLocationDistance,
         style: FogRevealStyle
-    ) {
-        guard !geometries.isEmpty else { return }
+    ) -> [CloudSprite] {
+        guard !geometries.isEmpty else { return [] }
 
         let now = CACurrentMediaTime()
         let originMapPoint = MKMapPoint(origin)
         let safeRadius = max(radiusMeters, 1)
         let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        let level = currentCloudLevel
+        let clearRadius = CloudField.clearRadius(level: level)
 
-        let dirtyRect = stateLock.fogWithLock { () -> MKMapRect in
+        var revealRect = MKMapRect.null
+        for geometry in geometries {
+            revealRect = union(revealRect, geometry.mapRect)
+        }
+        let candidateClouds = CloudField.clouds(
+            withCentersIn: revealRect.insetBy(dx: -clearRadius, dy: -clearRadius),
+            level: level
+        )
+
+        let (dirtyRect, dispersed) = stateLock.fogWithLock { () -> (MKMapRect, [CloudSprite]) in
+            let visibleBefore = candidateClouds.filter { !isCloudCleared($0, level: level) }
             var dirty = MKMapRect.null
 
             for geometry in geometries {
@@ -134,17 +120,27 @@ final class FogRenderer: MKOverlayRenderer {
                 dirty = union(dirty, expandedMapRect(for: geometry))
             }
 
+            let dispersed = visibleBefore.filter { isCloudCleared($0, level: level) }
+            for cloud in dispersed {
+                let extent = cloud.drawSize
+                dirty = union(dirty, MKMapRect(
+                    x: cloud.centerX - extent.width,
+                    y: cloud.centerY - extent.height,
+                    width: extent.width * 2,
+                    height: extent.height * 2
+                ))
+            }
+
             renderTime = now
-            return dirty
+            return (dirty, dispersed)
         }
 
         ensureDisplayLink()
-        displayLink?.isPaused = false
         invalidate(dirtyRect)
+        return dispersed
     }
 
-    /// Clears exploration render state while retaining the cached visible grid,
-    /// so a reset returns to a fully fogged map with its hex territory texture.
+    /// Clears exploration render state so the map returns to full cloud cover.
     @MainActor
     func reset() {
         let dirtyRect = stateLock.fogWithLock { () -> MKMapRect in
@@ -153,9 +149,7 @@ final class FogRenderer: MKOverlayRenderer {
             revealAnimations.removeAll(keepingCapacity: true)
             return oldRect
         }
-
-        ensureDisplayLink()
-        invalidate(dirtyRect)
+        invalidate(expandedForClouds(dirtyRect, level: currentCloudLevel))
     }
 
     override func canDraw(_ mapRect: MKMapRect, zoomScale: MKZoomScale) -> Bool {
@@ -170,10 +164,18 @@ final class FogRenderer: MKOverlayRenderer {
         let drawRect = rect(for: mapRect)
         guard !drawRect.isEmpty else { return }
 
-        let paddedQueryRect = mapRectPaddedForSoftClearing(mapRect)
-        let snapshot = stateLock.fogWithLock {
-            FogRenderSnapshot(
-                cleared: clearedIndex.geometries(intersecting: paddedQueryRect),
+        let level = CloudField.level(forZoomScale: Double(zoomScale))
+        let clouds = CloudField.clouds(intersecting: mapRect, level: level)
+        let cloudProbePadding = CloudField.maximumDrawExtent(level: level)
+            + CloudField.clearRadius(level: level)
+        let queryRect = mapRect
+            .insetBy(dx: -cloudProbePadding, dy: -cloudProbePadding)
+            .union(mapRectPaddedForSoftClearing(mapRect))
+
+        let snapshot = stateLock.fogWithLock { () -> FogRenderSnapshot in
+            lastDrawnCloudLevel = level
+            return FogRenderSnapshot(
+                cleared: clearedIndex.geometries(intersecting: queryRect),
                 animations: revealAnimations,
                 time: renderTime
             )
@@ -182,104 +184,59 @@ final class FogRenderer: MKOverlayRenderer {
         context.saveGState()
         context.setAllowsAntialiasing(true)
         context.setShouldAntialias(true)
+        context.interpolationQuality = .medium
 
         // Copying the base alpha avoids accumulating opacity when MapKit redraws
         // the same backing tile multiple times.
+        context.saveGState()
         context.setBlendMode(.copy)
         context.setFillColor(appearance.baseFogColor.cgColor)
         context.fill(drawRect)
         context.restoreGState()
 
-        drawAtmosphere(in: drawRect, at: snapshot.time, context: context)
+        drawClouds(clouds, cleared: snapshot.cleared, level: level, clip: drawRect, context: context)
         punchClearedCells(
             snapshot.cleared,
             animations: snapshot.animations,
             time: snapshot.time,
             context: context
         )
-        drawRevealGlows(
-            snapshot.cleared,
-            animations: snapshot.animations,
-            time: snapshot.time,
-            context: context
-        )
+        context.restoreGState()
     }
 
     // MARK: - Core Graphics drawing
 
-    private func drawAtmosphere(
-        in drawRect: CGRect,
-        at time: CFTimeInterval,
+    private func drawClouds(
+        _ clouds: [CloudSprite],
+        cleared: [CellGeometry],
+        level: Int,
+        clip: CGRect,
         context: CGContext
     ) {
-        guard !drawRect.isEmpty else { return }
-
-        if let primaryTexture {
-            let phase = CGPoint(
-                x: CGFloat(time) * appearance.primaryDriftVelocity.x,
-                y: CGFloat(time) * appearance.primaryDriftVelocity.y
-            )
-            drawTiledTexture(
-                primaryTexture,
-                in: drawRect,
-                tileSize: appearance.primaryTextureTileSize,
-                phase: phase,
-                opacity: appearance.primaryTextureOpacity,
-                blendMode: .normal,
-                context: context
-            )
-        }
-
-        if let secondaryTexture {
-            let phase = CGPoint(
-                x: CGFloat(time) * appearance.secondaryDriftVelocity.x,
-                y: CGFloat(time) * appearance.secondaryDriftVelocity.y
-            )
-            drawTiledTexture(
-                secondaryTexture,
-                in: drawRect,
-                tileSize: appearance.secondaryTextureTileSize,
-                phase: phase,
-                opacity: appearance.secondaryTextureOpacity,
-                blendMode: .screen,
-                context: context
-            )
-        }
-    }
-
-    private func drawTiledTexture(
-        _ image: CGImage,
-        in drawRect: CGRect,
-        tileSize: CGFloat,
-        phase: CGPoint,
-        opacity: CGFloat,
-        blendMode: CGBlendMode,
-        context: CGContext
-    ) {
-        guard tileSize > 0 else { return }
-
-        let wrappedX = phase.x.truncatingRemainder(dividingBy: tileSize)
-        let wrappedY = phase.y.truncatingRemainder(dividingBy: tileSize)
-        var x = floor((drawRect.minX - wrappedX) / tileSize) * tileSize + wrappedX
-        let startY = floor((drawRect.minY - wrappedY) / tileSize) * tileSize + wrappedY
+        guard !clouds.isEmpty else { return }
+        let clearRadius = CloudField.clearRadius(level: level)
 
         context.saveGState()
-        context.clip(to: drawRect)
-        context.setAlpha(opacity)
-        context.setBlendMode(blendMode)
+        context.clip(to: clip)
+        for cloud in clouds {
+            guard let image = atlas.image(at: cloud.spriteIndex),
+                  !Self.isCloudCleared(cloud, clearRadius: clearRadius, among: cleared)
+            else { continue }
 
-        while x < drawRect.maxX {
-            var y = startY
-            while y < drawRect.maxY {
-                context.draw(
-                    image,
-                    in: CGRect(x: x, y: y, width: tileSize, height: tileSize)
-                )
-                y += tileSize
-            }
-            x += tileSize
+            let size = cloud.drawSize
+            let center = point(for: cloud.center)
+            context.saveGState()
+            context.translateBy(x: center.x, y: center.y)
+            context.rotate(by: cloud.rotation)
+            // The overlay context is y-down; CGImages draw y-up.
+            context.scaleBy(x: cloud.isFlipped ? -1 : 1, y: -1)
+            context.setAlpha(cloud.opacity)
+            context.draw(
+                image,
+                in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height)
+            )
+            context.restoreGState()
         }
-
         context.restoreGState()
     }
 
@@ -306,7 +263,7 @@ final class FogRenderer: MKOverlayRenderer {
 
             let center = point(for: geometry.centerMapPoint)
             let settledRadius = projectedRadius(of: geometry) * appearance.clearMaskRadiusScale
-            let dispersalScale = 0.74 + 0.26 * progress
+            let dispersalScale = 0.7 + 0.3 * progress
             let radius = settledRadius * dispersalScale
 
             context.saveGState()
@@ -338,41 +295,38 @@ final class FogRenderer: MKOverlayRenderer {
         context.restoreGState()
     }
 
-    private func drawRevealGlows(
-        _ geometries: [CellGeometry],
-        animations: [H3CellID: CellRevealAnimation],
-        time: CFTimeInterval,
-        context: CGContext
-    ) {
-        guard let revealBloomGradient else { return }
+    // MARK: - Cloud clearing
 
-        context.saveGState()
-        context.setBlendMode(.screen)
+    /// Must be called with `stateLock` held.
+    private func isCloudCleared(_ cloud: CloudSprite, level: Int) -> Bool {
+        let clearRadius = CloudField.clearRadius(level: level)
+        let probe = clearRadius + 1_200
+        let nearby = clearedIndex.geometries(intersecting: MKMapRect(
+            x: cloud.centerX - probe,
+            y: cloud.centerY - probe,
+            width: probe * 2,
+            height: probe * 2
+        ))
+        return Self.isCloudCleared(cloud, clearRadius: clearRadius, among: nearby)
+    }
 
+    /// A cloud gets pushed aside once any explored cell is within the clear
+    /// radius of its center (or the center sits inside that cell).
+    private static func isCloudCleared(
+        _ cloud: CloudSprite,
+        clearRadius: Double,
+        among geometries: [CellGeometry]
+    ) -> Bool {
         for geometry in geometries {
-            guard let animation = animations[geometry.id] else {
-                continue
+            let cellRadius = max(geometry.mapRect.size.width, geometry.mapRect.size.height) * 0.5
+            let radius = max(clearRadius, cellRadius)
+            let dx = geometry.centerMapPoint.x - cloud.centerX
+            let dy = geometry.centerMapPoint.y - cloud.centerY
+            if dx * dx + dy * dy < radius * radius {
+                return true
             }
-
-            let opacity = glowOpacity(for: animation, at: time)
-            guard opacity > 0 else { continue }
-
-            let center = point(for: geometry.centerMapPoint)
-            let radius = projectedRadius(of: geometry) * appearance.revealBloomRadiusScale
-            context.saveGState()
-            context.setAlpha(opacity)
-            context.drawRadialGradient(
-                revealBloomGradient,
-                startCenter: center,
-                startRadius: 0,
-                endCenter: center,
-                endRadius: radius,
-                options: []
-            )
-            context.restoreGState()
         }
-
-        context.restoreGState()
+        return false
     }
 
     private func projectedEdgeLength(of geometry: CellGeometry) -> CGFloat {
@@ -413,7 +367,7 @@ final class FogRenderer: MKOverlayRenderer {
     @MainActor
     fileprivate func displayLinkDidFire(_ link: CADisplayLink) {
         let now = link.timestamp
-        let animationUpdate = stateLock.fogWithLock { () -> AnimationUpdate in
+        let update = stateLock.fogWithLock { () -> AnimationUpdate in
             renderTime = now
             var dirty = MKMapRect.null
 
@@ -428,23 +382,10 @@ final class FogRenderer: MKOverlayRenderer {
             )
         }
 
-        var dirtyRect = animationUpdate.dirtyMapRect
-        let atmosphericFPS = appearance.atmosphericFramesPerSecond
-        if atmosphericMotionEnabled,
-           atmosphericFPS > 0,
-           now - lastAtmosphericInvalidation >= 1 / atmosphericFPS,
-           let visibleRect = visibleMapRectProvider?()
-        {
-            lastAtmosphericInvalidation = now
-            dirtyRect = union(dirtyRect, visibleRect)
+        if !update.dirtyMapRect.isNull, !update.dirtyMapRect.isEmpty {
+            setNeedsDisplay(update.dirtyMapRect)
         }
-
-        if !dirtyRect.isNull, !dirtyRect.isEmpty {
-            setNeedsDisplay(dirtyRect)
-        }
-
-        link.isPaused = !(atmosphericMotionEnabled && atmosphericFPS > 0)
-            && !animationUpdate.hasActiveAnimations
+        link.isPaused = !update.hasActiveAnimations
     }
 
     @MainActor
@@ -458,6 +399,12 @@ final class FogRenderer: MKOverlayRenderer {
         }
     }
 
+    private func expandedForClouds(_ mapRect: MKMapRect, level: Int) -> MKMapRect {
+        guard !mapRect.isNull else { return mapRect }
+        let padding = CloudField.maximumDrawExtent(level: level) + CloudField.clearRadius(level: level)
+        return mapRect.insetBy(dx: -padding, dy: -padding)
+    }
+
     private func revealProgress(
         for animation: CellRevealAnimation,
         at time: CFTimeInterval
@@ -467,25 +414,8 @@ final class FogRenderer: MKOverlayRenderer {
             start: animation.startTime + animation.delay,
             duration: animation.duration
         )
-        let fadePhase = min(max((phase - 0.14) / 0.62, 0), 1)
+        let fadePhase = min(max((phase - 0.08) / 0.75, 0), 1)
         return CGFloat(smoothStep(fadePhase))
-    }
-
-    private func glowOpacity(
-        for animation: CellRevealAnimation,
-        at time: CFTimeInterval
-    ) -> CGFloat {
-        let phase = normalizedProgress(
-            now: time,
-            start: animation.startTime + animation.delay,
-            duration: animation.duration
-        )
-        guard phase > 0, phase < 1 else { return 0 }
-
-        if phase < 0.18 {
-            return CGFloat(smoothStep(phase / 0.18))
-        }
-        return CGFloat(1 - smoothStep((phase - 0.18) / 0.82))
     }
 
     private func normalizedProgress(
@@ -519,7 +449,7 @@ final class FogRenderer: MKOverlayRenderer {
         return lhs.union(rhs)
     }
 
-    // MARK: - Procedural texture
+    // MARK: - Masks
 
     private static func makeGradient(colors: [UIColor], locations: [CGFloat]) -> CGGradient? {
         CGGradient(
@@ -549,7 +479,7 @@ final class FogRenderer: MKOverlayRenderer {
                       UIColor(white: 1, alpha: 0.72),
                       UIColor(white: 1, alpha: 0)
                   ],
-                  locations: [0, 0.68, 0.82, 1]
+                  locations: [0, 0.6, 0.8, 1]
               )
         else {
             return nil
@@ -565,67 +495,6 @@ final class FogRenderer: MKOverlayRenderer {
             options: []
         )
         return context.makeImage()
-    }
-
-    /// Produces a seamless periodic cloud texture once. Integer-frequency waves
-    /// keep every tile edge continuous while layered billows avoid a flat wash.
-    private static func makeAtmosphereTexture(
-        size: Int,
-        tint: (red: UInt8, green: UInt8, blue: UInt8),
-        seed: Double
-    ) -> CGImage? {
-        guard size > 0 else { return nil }
-
-        var bytes = [UInt8](repeating: 0, count: size * size * 4)
-        let twoPi = Double.pi * 2
-
-        for y in 0 ..< size {
-            for x in 0 ..< size {
-                let u = Double(x) / Double(size)
-                let v = Double(y) / Double(size)
-                let broad = sin(twoPi * u + seed) * cos(twoPi * v - seed * 0.61)
-                let cross = sin(twoPi * (2 * u + v) + seed * 0.43)
-                    * cos(twoPi * (u - 2 * v) - seed)
-                let middle = sin(twoPi * (3 * u - 2 * v) + seed * 1.17)
-                    * cos(twoPi * (2 * u + 3 * v) + seed * 0.56)
-                let fine = sin(twoPi * (6 * u - 4 * v) + seed * 1.47)
-                    * cos(twoPi * (5 * u + 7 * v) - seed * 0.62)
-                let billow = abs(sin(twoPi * (2 * u - v) + seed * 0.29)) * 2 - 1
-                let wave = broad * 0.42
-                    + cross * 0.27
-                    + middle * 0.17
-                    + fine * 0.07
-                    + billow * 0.07
-                let normalized = min(max((wave + 1) * 0.5, 0), 1)
-                let shaped = normalized * normalized * (3 - 2 * normalized)
-                let alpha = UInt8(8 + shaped * 70)
-                let offset = (y * size + x) * 4
-
-                // premultipliedLast requires channels to be premultiplied.
-                bytes[offset] = UInt8(UInt16(tint.red) * UInt16(alpha) / 255)
-                bytes[offset + 1] = UInt8(UInt16(tint.green) * UInt16(alpha) / 255)
-                bytes[offset + 2] = UInt8(UInt16(tint.blue) * UInt16(alpha) / 255)
-                bytes[offset + 3] = alpha
-            }
-        }
-
-        guard let provider = CGDataProvider(data: Data(bytes) as CFData) else {
-            return nil
-        }
-
-        return CGImage(
-            width: size,
-            height: size,
-            bitsPerComponent: 8,
-            bitsPerPixel: 32,
-            bytesPerRow: size * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: true,
-            intent: .defaultIntent
-        )
     }
 }
 

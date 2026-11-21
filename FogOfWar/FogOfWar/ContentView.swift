@@ -7,11 +7,10 @@ import SwiftData
 import SwiftUI
 import FogKit
 
-/// Root view. For now it shows the developer test screen; Jonathan replaces this
-/// with the real TabView (Map + Profile) when the designed screens are ready.
+/// Root view: the designed map + profile split (see `MainView`).
 struct ContentView: View {
     var body: some View {
-        DevHarnessView()
+        MainView()
     }
 }
 

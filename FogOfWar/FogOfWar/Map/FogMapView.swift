@@ -15,30 +15,33 @@ struct FogMapView: UIViewRepresentable {
     /// When false, `userCoordinate` is still used for recentering / follow, but no
     /// player annotation is drawn (profile path-trace).
     var showsUserAnnotation: Bool = true
-    var questMarker: QuestMarkerData?
+    var questMarkers: [QuestMarkerData] = []
     /// Optional route polylines (active expedition or profile path tracing). Each
     /// inner array is one continuous segment — never join across gaps.
     var routeSegments: [[CLLocationCoordinate2D]] = []
+    /// Keeps MapKit's legal label clear of chrome drawn over the map.
+    var mapChromeInsets: UIEdgeInsets = .zero
     var recenterToken: Int
     var onMapTap: (CLLocationCoordinate2D) -> Void
     var onFollowingChanged: (Bool) -> Void
+    var onQuestSelected: (String) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    func makeUIView(context: Context) -> MKMapView {
-        let mapView = MKMapView(frame: .zero)
-        context.coordinator.install(on: mapView)
-        return mapView
+    func makeUIView(context: Context) -> FogMapContainerView {
+        let container = FogMapContainerView()
+        context.coordinator.install(on: container)
+        return container
     }
 
-    func updateUIView(_ mapView: MKMapView, context: Context) {
-        context.coordinator.update(from: self, on: mapView)
+    func updateUIView(_ container: FogMapContainerView, context: Context) {
+        context.coordinator.update(from: self, on: container.mapView)
     }
 
-    static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
-        coordinator.invalidate(mapView: mapView)
+    static func dismantleUIView(_ container: FogMapContainerView, coordinator: Coordinator) {
+        coordinator.invalidate(mapView: container.mapView)
     }
 
     @MainActor
@@ -51,11 +54,13 @@ struct FogMapView: UIViewRepresentable {
         private var lastUserCoordinate: CLLocationCoordinate2D?
         private var lastRecenterToken: Int
         private var isFollowingUser = true
-        private var questAnnotation: QuestAnnotation?
-        private var playerAnnotation: PlayerAnnotation?
+        private var questAnnotations: [String: QuestAnnotation] = [:]
+        private var playerAnnotation: UserLocationAnnotation?
+        private var playerHeading: CLLocationDirection?
         private var routeOverlays: [MKPolyline] = []
         private var renderedRouteSegments: [[CLLocationCoordinate2D]] = []
         private weak var mapView: MKMapView?
+        private weak var dispersalView: CloudDispersalView?
 
         init(parent: FogMapView) {
             self.parent = parent
@@ -63,27 +68,30 @@ struct FogMapView: UIViewRepresentable {
             super.init()
         }
 
-        func install(on mapView: MKMapView) {
+        func install(on container: FogMapContainerView) {
+            let mapView = container.mapView
             self.mapView = mapView
+            dispersalView = container.dispersalView
             mapView.delegate = self
             mapView.accessibilityLabel = "Exploration map"
-            mapView.accessibilityHint = "Pan and pinch to explore. Uncleared places are covered by fog."
+            mapView.accessibilityHint = "Pan and pinch to explore. Unexplored places are covered by clouds."
 
-            let configuration = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
+            let configuration = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .default)
             configuration.pointOfInterestFilter = .includingAll
             mapView.preferredConfiguration = configuration
             mapView.isPitchEnabled = false
             mapView.isRotateEnabled = false
-            mapView.showsCompass = true
-            mapView.showsScale = true
+            mapView.showsCompass = false
+            mapView.showsScale = false
+            mapView.layoutMargins = parent.mapChromeInsets
 
             mapView.register(
                 QuestAnnotationView.self,
                 forAnnotationViewWithReuseIdentifier: QuestAnnotationView.reuseIdentifier
             )
             mapView.register(
-                MKMarkerAnnotationView.self,
-                forAnnotationViewWithReuseIdentifier: PlayerAnnotation.reuseIdentifier
+                UserLocationAnnotationView.self,
+                forAnnotationViewWithReuseIdentifier: UserLocationAnnotation.reuseIdentifier
             )
 
             let initialCenter = parent.userCoordinate ?? Self.westernUniversity
@@ -93,8 +101,7 @@ struct FogMapView: UIViewRepresentable {
                     latitudinalMeters: 1_000,
                     // A square region makes MapKit expand the vertical span to
                     // more than 2 km on a portrait iPhone. This ratio keeps the
-                    // initial visible height near the PRD's requested 1 km and
-                    // preserves the PRD's roughly one-kilometre initial view.
+                    // initial visible height near the PRD's requested 1 km.
                     longitudinalMeters: 460
                 ),
                 animated: false
@@ -121,24 +128,31 @@ struct FogMapView: UIViewRepresentable {
             updateAnnotations(on: mapView)
             updateRouteOverlays(on: mapView)
 
+            if mapView.layoutMargins != newParent.mapChromeInsets {
+                mapView.layoutMargins = newParent.mapChromeInsets
+            }
+
             if newParent.recenterToken != lastRecenterToken {
                 lastRecenterToken = newParent.recenterToken
                 setFollowing(true)
                 mapView.setCenter(newParent.userCoordinate ?? Self.westernUniversity, animated: true)
-            } else if
-                let coordinate = newParent.userCoordinate,
-                !coordinatesEqual(coordinate, lastUserCoordinate),
-                isFollowingUser
-            {
-                mapView.setCenter(coordinate, animated: true)
+            } else if let coordinate = newParent.userCoordinate, isFollowingUser {
+                // Also catches drift from the initial region being applied
+                // before the map had its final size.
+                let point = mapView.convert(coordinate, toPointTo: mapView)
+                let center = CGPoint(x: mapView.bounds.midX, y: mapView.bounds.midY)
+                let offCenter = hypot(point.x - center.x, point.y - center.y) > 2
+                if !coordinatesEqual(coordinate, lastUserCoordinate) || (offCenter && mapView.bounds.height > 0) {
+                    mapView.setCenter(coordinate, animated: true)
+                }
             }
 
             lastUserCoordinate = newParent.userCoordinate
         }
 
         func invalidate(mapView: MKMapView) {
-            fogRenderer?.atmosphericMotionEnabled = false
             fogRenderer?.visibleMapRectProvider = nil
+            dispersalView?.removeAllPuffs()
             mapView.delegate = nil
             if !routeOverlays.isEmpty {
                 mapView.removeOverlays(routeOverlays)
@@ -164,6 +178,7 @@ struct FogMapView: UIViewRepresentable {
 
             if desiredCells.isEmpty {
                 fogRenderer.reset()
+                dispersalView?.removeAllPuffs()
                 renderedCells = []
                 lastRenderedChangeID = parent.latestChange?.id
                 return
@@ -173,21 +188,22 @@ struct FogMapView: UIViewRepresentable {
             let removedCells = renderedCells.subtracting(desiredCells)
             let change = parent.latestChange
 
+            // Location updates can coalesce between SwiftUI updates, so the
+            // latest change may not list every added cell. Any purely additive
+            // update still animates (and pushes clouds) from the newest origin.
             if
                 removedCells.isEmpty,
                 !addedCells.isEmpty,
-                let change,
-                change.id != lastRenderedChangeID,
-                change.newlyClearedCells.isSuperset(of: addedCells),
-                let origin = change.origin
+                let origin = change?.origin ?? parent.userCoordinate
             {
                 let geometries = addedCells.compactMap { try? parent.tileMath.geometry(for: $0) }
-                fogRenderer.reveal(
+                let dispersed = fogRenderer.reveal(
                     geometries,
                     origin: origin,
-                    radiusMeters: change.radiusMeters ?? 0,
+                    radiusMeters: change?.radiusMeters ?? 0,
                     style: .normal
                 )
+                dispersalView?.disperse(dispersed, awayFrom: origin)
             } else {
                 let geometries = desiredCells.compactMap { try? parent.tileMath.geometry(for: $0) }
                 fogRenderer.setClearedGeometries(geometries)
@@ -198,28 +214,41 @@ struct FogMapView: UIViewRepresentable {
         }
 
         private func updateAnnotations(on mapView: MKMapView) {
-            if let markerData = parent.questMarker {
-                if let questAnnotation, questAnnotation.markerData.id == markerData.id {
-                    questAnnotation.update(with: markerData)
-                    (mapView.view(for: questAnnotation) as? QuestAnnotationView)?.refresh()
-                } else {
-                    if let questAnnotation {
-                        mapView.removeAnnotation(questAnnotation)
+            var stale = questAnnotations
+            for marker in parent.questMarkers {
+                if let existing = stale.removeValue(forKey: marker.id) {
+                    if existing.markerData != marker {
+                        existing.update(with: marker)
+                        (mapView.view(for: existing) as? QuestAnnotationView)?.refresh()
                     }
-                    let annotation = QuestAnnotation(data: markerData)
-                    questAnnotation = annotation
+                } else {
+                    let annotation = QuestAnnotation(data: marker)
+                    questAnnotations[marker.id] = annotation
                     mapView.addAnnotation(annotation)
                 }
-            } else if let questAnnotation {
-                mapView.removeAnnotation(questAnnotation)
-                self.questAnnotation = nil
+            }
+            for (id, annotation) in stale {
+                mapView.removeAnnotation(annotation)
+                questAnnotations.removeValue(forKey: id)
             }
 
             if parent.showsUserAnnotation, let coordinate = parent.userCoordinate {
                 if let playerAnnotation {
-                    playerAnnotation.coordinate = coordinate
+                    let previous = playerAnnotation.coordinate
+                    if !coordinatesEqual(coordinate, previous) {
+                        updateHeading(from: previous, to: coordinate)
+                        UIView.animate(
+                            withDuration: 0.35,
+                            delay: 0,
+                            options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
+                        ) {
+                            playerAnnotation.coordinate = coordinate
+                        }
+                        (mapView.view(for: playerAnnotation) as? UserLocationAnnotationView)?
+                            .setHeading(playerHeading, animated: true)
+                    }
                 } else {
-                    let annotation = PlayerAnnotation(coordinate: coordinate)
+                    let annotation = UserLocationAnnotation(coordinate: coordinate)
                     playerAnnotation = annotation
                     mapView.addAnnotation(annotation)
                 }
@@ -227,6 +256,22 @@ struct FogMapView: UIViewRepresentable {
                 mapView.removeAnnotation(playerAnnotation)
                 self.playerAnnotation = nil
             }
+        }
+
+        /// The location pipeline has no compass heading, so the beam follows the
+        /// direction of travel once the player has moved a meaningful distance.
+        private func updateHeading(from previous: CLLocationCoordinate2D, to next: CLLocationCoordinate2D) {
+            let from = CLLocation(latitude: previous.latitude, longitude: previous.longitude)
+            let to = CLLocation(latitude: next.latitude, longitude: next.longitude)
+            guard to.distance(from: from) > 0.8 else { return }
+
+            let lat1 = previous.latitude * .pi / 180
+            let lat2 = next.latitude * .pi / 180
+            let deltaLon = (next.longitude - previous.longitude) * .pi / 180
+            let y = sin(deltaLon) * cos(lat2)
+            let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(deltaLon)
+            let bearing = atan2(y, x) * 180 / .pi
+            playerHeading = (bearing + 360).truncatingRemainder(dividingBy: 360)
         }
 
         private func updateRouteOverlays(on mapView: MKMapView) {
@@ -313,7 +358,6 @@ struct FogMapView: UIViewRepresentable {
 
             let renderer = FogRenderer(overlay: overlay)
             renderer.visibleMapRectProvider = { [weak mapView] in mapView?.visibleMapRect }
-            renderer.atmosphericMotionEnabled = !UIAccessibility.isReduceMotionEnabled
             fogRenderer = renderer
             return renderer
         }
@@ -328,23 +372,24 @@ struct FogMapView: UIViewRepresentable {
                 return view
             }
 
-            if annotation is PlayerAnnotation {
+            if annotation is UserLocationAnnotation {
                 let view = mapView.dequeueReusableAnnotationView(
-                    withIdentifier: PlayerAnnotation.reuseIdentifier,
+                    withIdentifier: UserLocationAnnotation.reuseIdentifier,
                     for: annotation
-                ) as? MKMarkerAnnotationView
+                ) as? UserLocationAnnotationView
                 view?.annotation = annotation
-                view?.markerTintColor = UIColor(red: 0.10, green: 0.82, blue: 0.76, alpha: 1)
-                view?.glyphTintColor = .white
-                view?.glyphImage = UIImage(systemName: "figure.walk")
-                view?.displayPriority = .required
-                view?.zPriority = .max
-                view?.collisionMode = .circle
-                view?.clusteringIdentifier = nil
+                view?.setHeading(playerHeading, animated: false)
                 return view
             }
 
             return nil
+        }
+
+        func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
+            if let quest = annotation as? QuestAnnotation {
+                parent.onQuestSelected(quest.markerData.id)
+            }
+            mapView.deselectAnnotation(annotation, animated: false)
         }
 
         private func coordinatesEqual(
@@ -362,14 +407,24 @@ struct FogMapView: UIViewRepresentable {
     }
 }
 
-private final class PlayerAnnotation: NSObject, MKAnnotation {
-    static let reuseIdentifier = "PlayerAnnotationView"
+/// Hosts the map with the cloud-dispersal effect layered on top.
+final class FogMapContainerView: UIView {
+    let mapView = MKMapView(frame: .zero)
+    let dispersalView = CloudDispersalView()
 
-    @objc dynamic var coordinate: CLLocationCoordinate2D
-    let title: String? = "Explorer"
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        mapView.frame = bounds
+        mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(mapView)
 
-    init(coordinate: CLLocationCoordinate2D) {
-        self.coordinate = coordinate
-        super.init()
+        dispersalView.frame = bounds
+        dispersalView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        dispersalView.mapView = mapView
+        addSubview(dispersalView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 }

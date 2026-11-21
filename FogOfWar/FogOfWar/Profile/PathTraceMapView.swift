@@ -52,7 +52,6 @@ struct PathTraceMapView: View {
                 tileMath: tileMath,
                 userCoordinate: initialCenter,
                 showsUserAnnotation: showsPlayer,
-                questMarker: nil,
                 routeSegments: routeSegments.map { $0.map(\.clCoordinate) },
                 recenterToken: recenterToken,
                 onMapTap: { _ in },

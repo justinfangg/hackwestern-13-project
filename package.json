@@ -1,0 +1,21 @@
+{
+  "name": "fog-of-war-backend-tools",
+  "private": true,
+  "description": "Node tooling for the Fog of War IRL backend (database migrations, seeds, scripts). The iOS app is separate.",
+  "type": "module",
+  "scripts": {
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "node scripts/db/migrate.mjs",
+    "db:migrate:tiger": "node scripts/db/migrate.mjs --tiger",
+    "db:reset": "docker compose down -v && docker compose up -d --wait && node scripts/db/migrate.mjs",
+    "db:psql": "docker compose exec db psql -U postgres -d fogofwar",
+    "db:test": "node scripts/db/test-schema.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "postgres": "^4.1.1"
+  }
+}

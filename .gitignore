@@ -1,6 +1,25 @@
+# iOS / Swift
 .DS_Store
 .build/
 .swiftpm/
 DerivedData/
 xcuserdata/
 *.xcuserstate
+
+# Secrets: real values live only in .env and in Supabase Edge Function secrets
+.env
+.env.*
+!.env.example
+
+# Node (backend tooling)
+node_modules/
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
+
+# Prompt-tuning photos (V6): large, and may show people
+test-photos/
+
+# Windows
+Thumbs.db

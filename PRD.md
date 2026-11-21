@@ -38,7 +38,7 @@ Only work that's been pushed to GitHub is counted.
 ### Justin: what's next (in order)
 
 1. ~~Create the Supabase project and Gemini key~~ ✅ Done; keys are in `.env` (never committed). Gemini works but is intermittently slow/overloaded (503s, 38–51 s responses): `verify-quest` must use low thinking, retries and a ~10 s cap.
-2. **Settle the open decisions in `docs/api.md`** (D1–D12; Justin now decides). Recommended: accept all as proposed. **Remove the quest reveal** from the contract and mocks (`reveal_radius_m` in `quest-today`, the `reveal` object in `verify-quest`).
+2. ~~Settle the open decisions in `docs/api.md` and remove the quest reveal~~ ✅ Done: D1–D12 accepted as proposed; `reveal_radius_m` and `reveal` removed from the contract and mocks (API v0.2).
 3. **Align `FogNetworking` with `docs/api.md`.** My provisional shapes in `APIModels.swift` differ in several places:
    - coordinates are `{ "lat", "lng" }`, not `{ "latitude", "longitude" }`
    - `sync`: pings use `ts` (with milliseconds) / `lat` / `lng` / `accuracy_m` / `speed_mps`; tiles use `h3`; expeditions have no route segments (the server builds routes from pings) and must be sent with any batch containing their pings; limits are 5000 tiles / 2000 pings / 50 expeditions

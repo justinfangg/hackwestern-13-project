@@ -1,10 +1,10 @@
 # Fog of War IRL: Backend API contract
 
-Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.1 draft (2026-11-21)**
+Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.2 (2026-11-21): decisions settled, quest reveal removed**
 
 Four Supabase Edge Functions in front of the Supabase Postgres database. The app talks only to these functions. It never reads or writes database tables or Supabase Storage directly (row-level security blocks it).
 Mock responses live in [`docs/mocks/`](mocks/), one file per response. Build against the mocks until the functions are live.
-Items marked **Proposal, needs team OK** are listed again under [Open decisions](#open-decisions).
+Design decisions are marked (D1)–(D12) and listed under [Decisions](#decisions). All were accepted as proposed on 2026-11-21.
 
 ---
 
@@ -62,7 +62,7 @@ Every error from our code has this shape. `details` is optional and specific to 
 | Images | standard base64 (not URL-safe), no `data:` prefix | |
 | Quest category | `bench` · `lamppost` · `tree` · `fire_hydrant` · `mural` · `statue` · `mailbox`. The client must show unknown values with a generic icon | |
 
-"Today", "midnight" and quiet hours (23:00–05:00) are all in **America/Toronto** (Proposal, needs team OK: D2).
+"Today", "midnight" and quiet hours (23:00–05:00) are all in **America/Toronto** (D2).
 
 ---
 
@@ -87,7 +87,7 @@ Request ([mock](mocks/sync.request.json)). Every array may be empty or left out.
 |---|---|
 | `expeditions[]` | Upsert by `id`. `ended_at: null` while it's running. Once `ended_at` is set it stays set. `distance_m` and `new_tiles` are the client's running totals (last write wins). **Every batch that has pings for an expedition must also include that expedition's current record.** The server builds the route line itself from the pings |
 | `pings[]` | Accepted fixes only (after `FixFilter`), raw fixes rather than interpolated points. `expedition_id` may be `null` for fixes outside an expedition (these count toward distance but don't appear in `routes`). Deduped on `(user, ts)`, so **send `ts` with milliseconds** (`ISO8601DateFormatter` with `.withFractionalSeconds`). With whole seconds, two fixes in the same second collide and one is dropped |
-| `tiles[]` | Res 11 cells, including Quest Reveal tiles. Upserted. The earliest `cleared_at` wins |
+| `tiles[]` | Res 11 cells cleared by walking. Upserted. The earliest `cleared_at` wins |
 
 Bad rows (invalid H3, a lat/lng out of range, `ts` more than 5 min in the future) are **dropped and counted**, not failed, so one bad row can't jam the queue. A `200` means everything else is stored: remove the batch from the queue.
 
@@ -117,8 +117,7 @@ Response `200` ([mock](mocks/quest-today.200.json)):
     "hint": "A wooden bench facing the hill, just below the tower.",
     "place_name": "University College Hill",
     "target": { "lat": 43.0087, "lng": -81.2731 },
-    "geofence_radius_m": 40,
-    "reveal_radius_m": 150
+    "geofence_radius_m": 40
   },
   "found_today": 8,
   "completed_by_me": false,
@@ -155,10 +154,10 @@ Request ([mock](mocks/verify-quest.request.json)), body ≤ 6 MB:
 ```
 - `photo_jpeg_base64`: the in-app camera photo, JPEG, long edge ≤ 1024 px, quality ~0.7.
 - `sticker_png_base64`: the on-device cut-out (`VNGenerateForegroundInstanceMaskRequest`, or the circular-crop fallback), transparent PNG, long edge ≤ 512 px.
-- **Proposal, needs team OK (D3):** the server uploads both to Storage **only when verification passes**. The app never uploads to Storage, so `StickerStorage` isn't needed and anonymous users need no Storage policies.
+- The server uploads both to Storage **only when verification passes** (D3): the sticker to the public `stickers` bucket, the photo to the private `quest-photos` bucket. The app never uploads to Storage.
 
 Checks run in this order: `quest_not_found` (404) → `not_todays_quest` (422) → `already_completed` (409) → `no_attempts_left` (429) → `too_far` (422) → vision model.
-Geofence: the distance from `lat,lng` to `quest.target` must be ≤ 40 m + min(`accuracy_m`, 20) (Proposal, needs team OK: D6). Only a vision call uses up an attempt. Geofence failures and `502` don't.
+Geofence: the distance from `lat,lng` to `quest.target` must be ≤ 40 m + min(`accuracy_m`, 20) (D6). Only a vision call uses up an attempt. Geofence failures and `502` don't.
 
 Response `200`, passed ([mock](mocks/verify-quest.200-verified.json)):
 ```json
@@ -169,14 +168,14 @@ Response `200`, passed ([mock](mocks/verify-quest.200-verified.json)):
   "attempts_left": 4,
   "completion": { "id": "e2a9c7f1-…", "sticker_url": "https://<ref>.supabase.co/storage/v1/object/public/stickers/<user_id>/<completion_id>.png",
                   "completed_at": "2026-11-21T17:16:04Z" },
-  "streak": 4,
-  "reveal": { "center": { "lat": 43.0087, "lng": -81.2731 }, "radius_m": 150 }
+  "streak": 4
 }
 ```
-Response `200`, failed ([mock](mocks/verify-quest.200-rejected.json)): `verified: false`, `completion`, `streak` and `reveal` are `null`, and `reason` is a short sentence you can show in the retry UI (Q-12).
+Response `200`, failed ([mock](mocks/verify-quest.200-rejected.json)): `verified: false`, `completion` and `streak` are `null`, and `reason` is a short sentence you can show in the retry UI (Q-12).
 - `verified` is the server's final answer (model says yes **and** `confidence ≥ 0.7`). Don't re-apply a threshold on the client.
 - `streak` = the new current streak after this completion.
-- `reveal`: clear `gridDisk` around `center` for `radius_m` locally, then send those tiles via `sync` as usual.
+- Completing a quest does **not** clear extra fog (PRD Q-9 removed). Fog only clears where the user walks.
+- The vision model (Gemini Flash, low thinking) is called with up to 2 retries on overload (503) and a ~10 s total cap. If it still fails, the response is `502 verifier_unavailable`, which doesn't use an attempt; the app shows "try again".
 
 Error example: [`verify-quest.422-too-far.json`](mocks/verify-quest.422-too-far.json). Also possible: `already_completed`, `no_attempts_left`, `not_todays_quest`, `quest_not_found`, `payload_too_large`, `verifier_unavailable`.
 
@@ -207,11 +206,11 @@ Response `200` ([mock](mocks/profile.200.json)), abridged:
 | `username` | `null` until `POST profile` has been called |
 | `stats.current_streak` | Run of consecutive Toronto days with a completion, ending today **or yesterday** (today doesn't break the streak until midnight passes) |
 | `stickers` | All completions, newest first. `place` = the quest target |
-| `missed_days` | Days from the signup day to yesterday with no completion, newest first, at most 30. `category` = that day's quest in your home region (the region of your latest completion), or `null` (Proposal, needs team OK: D9). Shown as greyed silhouettes |
+| `missed_days` | Days from the signup day to yesterday with no completion, newest first, at most 30. `category` = that day's quest in your home region (the region of your latest completion), or `null` (D9). Shown as greyed silhouettes |
 | `weekly_activity` | The last 8 weeks, oldest first, Monday-start Toronto weeks, weeks with no activity included as zeros. Served from the `daily_activity` view |
 | `expeditions` | The last 50 ended expeditions, newest first |
 | `routes` | One simplified polyline (~5 m tolerance) per ended expedition, for path tracing |
-| `tiles` | **Only with `?include=tiles`**: every cleared res 11 cell id ([mock](mocks/profile.200-include-tiles.json)). Call it once after a fresh install or sign-in to restore the fog, then rely on local state (Proposal, needs team OK: D8) |
+| `tiles` | **Only with `?include=tiles`**: every cleared res 11 cell id ([mock](mocks/profile.200-include-tiles.json)). Call it once after a fresh install or sign-in to restore the fog, then rely on local state (D8) |
 
 Error example: [`profile.401.json`](mocks/profile.401.json).
 
@@ -224,7 +223,7 @@ Sets or changes your username. Call it in onboarding, right after anonymous sign
 Request ([mock](mocks/profile-post.request.json)): `{ "username": "vishaal" }`
 Response `200` ([mock](mocks/profile-post.200.json)): `{ "user_id": "3f6c2a9e-…", "username": "vishaal", "created_at": "2026-11-14T18:55:02Z" }`
 
-Username rules (Proposal, needs team OK: D1):
+Username rules (D1):
 - 3–20 characters, `^[A-Za-z0-9_]+$`; leading and trailing spaces are trimmed.
 - Stored as typed. Uniqueness is **case-insensitive** (`Vishaal` blocks `vishaal`).
 - Setting the username you already have → `200`.
@@ -232,11 +231,11 @@ Username rules (Proposal, needs team OK: D1):
 
 ---
 
-## Open decisions
+## Decisions
 
-Each needs a yes or no from the team. The contract assumes **yes** until told otherwise.
+All accepted as proposed on 2026-11-21 (Justin, now owner of both the app and backend sides).
 
-| # | Proposal | Affects |
+| # | Decision | Affects |
 |---|---|---|
 | D1 | `POST profile` sets the username (nothing else writes `profiles`). Rules as in §6 | Jonathan (`AuthService`, onboarding) |
 | D2 | "Today", midnight reset and quiet hours use fixed **America/Toronto**, not the device timezone | everyone |

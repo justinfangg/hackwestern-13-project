@@ -13,8 +13,7 @@
       "lat": 43.0087,
       "lng": -81.2731
     },
-    "geofence_radius_m": 40,
-    "reveal_radius_m": 150
+    "geofence_radius_m": 40
   },
   "found_today": 8,
   "completed_by_me": false,

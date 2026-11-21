@@ -8,12 +8,5 @@
     "sticker_url": "https://abcdefghijklmnop.supabase.co/storage/v1/object/public/stickers/3f6c2a9e-8b1d-4e57-9a0c-5d2e7f4b1a60/e2a9c7f1-4b6d-4e83-8a5c-1d7f9b2e3c40.png",
     "completed_at": "2026-11-21T17:16:04Z"
   },
-  "streak": 4,
-  "reveal": {
-    "center": {
-      "lat": 43.0087,
-      "lng": -81.2731
-    },
-    "radius_m": 150
-  }
+  "streak": 4
 }

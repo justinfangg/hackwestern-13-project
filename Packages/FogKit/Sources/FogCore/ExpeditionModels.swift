@@ -35,7 +35,8 @@ public struct ExpeditionSummary: Identifiable, Hashable, Codable, Sendable {
     }()
 }
 
-/// A GPS fix as stored in the `location_pings` table.
+/// A GPS fix as stored in the `location_pings` table. Wire format (docs/api.md §2):
+/// `{ "expedition_id", "ts", "lat", "lng", "accuracy_m", "speed_mps" }`.
 public struct LocationPing: Hashable, Codable, Sendable {
     public var expeditionID: UUID?
     public var timestamp: Date
@@ -49,5 +50,30 @@ public struct LocationPing: Hashable, Codable, Sendable {
         self.coordinate = fix.coordinate
         self.accuracy = fix.horizontalAccuracy
         self.speed = fix.speed
+    }
+
+    // camelCase raw values: JSONCoding converts them to snake_case.
+    private enum CodingKeys: String, CodingKey {
+        case expeditionID = "expeditionId", timestamp = "ts", lat, lng, accuracy = "accuracyM", speed = "speedMps"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        expeditionID = try c.decodeIfPresent(UUID.self, forKey: .expeditionID)
+        timestamp = try c.decode(Date.self, forKey: .timestamp)
+        coordinate = Coordinate(latitude: try c.decode(Double.self, forKey: .lat),
+                                longitude: try c.decode(Double.self, forKey: .lng))
+        accuracy = try c.decodeIfPresent(Double.self, forKey: .accuracy) ?? -1
+        speed = try c.decodeIfPresent(Double.self, forKey: .speed)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(expeditionID, forKey: .expeditionID)   // explicit null outside an expedition
+        try c.encode(timestamp, forKey: .timestamp)
+        try c.encode(coordinate.latitude, forKey: .lat)
+        try c.encode(coordinate.longitude, forKey: .lng)
+        try c.encode(accuracy, forKey: .accuracy)
+        try c.encodeIfPresent(speed, forKey: .speed)
     }
 }

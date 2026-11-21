@@ -133,7 +133,7 @@ struct DevHarnessView: View {
                 switch capture.state {
                 case .ready:
                     Button("Take photo") { takePhoto() }.buttonStyle(.borderedProminent)
-                case .rejected, .error:
+                case .rejected, .error, .tooFar:
                     Button("Retry") { capture.retry() }
                 default:
                     EmptyView()
@@ -154,6 +154,8 @@ struct DevHarnessView: View {
         case .verifying: "Verifying…"
         case .success(let sticker): "Collected \(sticker.category) sticker!"
         case .rejected(let reason, let left): "Not verified: \(reason) (\(left) left)"
+        case .tooFar(let d): "Too far (\(Int(d)) m): walk closer and retry"
+        case .alreadyCompleted: "You already found today's quest"
         case .outOfAttempts: "Out of attempts today"
         case .error(let message): message
         }
@@ -212,7 +214,12 @@ struct DevHarnessView: View {
                 Spacer()
                 Button("End") { exp.end() }.buttonStyle(.bordered).tint(.red)
             } else {
-                Text("Sync: \(services.sync.pendingCount) pending").font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(services.usingMockBackend ? "Mock" : "Live") backend · sync: \(services.sync.pendingCount) pending")
+                    if let total = services.sync.serverTotalTiles { Text("Server has \(total) tiles") }
+                    if let error = services.sync.lastError { Text("Sync error: \(error)").lineLimit(2) }
+                }
+                .font(.caption)
                 Spacer()
                 Button("Start expedition") { exp.start() }.buttonStyle(.borderedProminent)
             }

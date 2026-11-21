@@ -18,8 +18,11 @@ public protocol ExplorationClearing: AnyObject {
 
 /// Implemented by Jonathan's `AuthService` (Supabase anonymous sign-in).
 public protocol AuthTokenProviding: AnyObject, Sendable {
-    /// A valid Supabase access token (JWT), refreshed if needed.
-    func accessToken() async throws -> String
-    /// Supabase user id of the signed-in user, if any.
-    var currentUserID: UUID? { get async }
+    /// The current Supabase access token (JWT). With `forceRefresh`, refresh the session first:
+    /// FogKit asks for this once after any 401 and retries the request (docs/api.md §1).
+    func accessToken(forceRefresh: Bool) async throws -> String
+}
+
+extension AuthTokenProviding {
+    public func accessToken() async throws -> String { try await accessToken(forceRefresh: false) }
 }

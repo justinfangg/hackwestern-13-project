@@ -8,12 +8,19 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:push": "supabase db push",
-    "db:test": "node scripts/db/test-schema.mjs"
+    "db:test": "node scripts/db/test-schema.mjs",
+    "functions:serve": "supabase functions serve --env-file supabase/functions/.env",
+    "functions:smoke": "node scripts/functions/smoke.mjs",
+    "functions:deploy": "supabase functions deploy",
+    "db:seed-quests": "node scripts/db/seed-quests.mjs > supabase/seed/quests.sql && supabase db query --remote -f supabase/seed/quests.sql"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
     "postgres": "^4.1.1"
+  },
+  "devDependencies": {
+    "h3-js": "^4.2.1"
   }
 }

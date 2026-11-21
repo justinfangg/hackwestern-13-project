@@ -21,12 +21,13 @@ Only work that's been pushed to GitHub is counted.
 | API contract + mock responses | Vishaal | ✅ (open decisions still to settle) | `main`: `docs/api.md`, `docs/mocks/` |
 | Database schema + schema tests (17/17 pass on Supabase Postgres) | Vishaal, moved to Supabase by Justin | ✅ pushed to the cloud project | `main`: `supabase/migrations/`, `scripts/db/`, `docs/backend.md` |
 | Supabase project `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1): anonymous sign-in, schema, `stickers` + `quest-photos` buckets, `GEMINI_API_KEY` secret | Justin | ✅ | `supabase/config.toml` |
-| Edge Functions, prompt tuning, quest + demo seeding | Justin (taken over from Vishaal) | ⬜ | |
+| Edge Functions (deployed), quest seeding | Justin | ✅ (Gemini unreliable) | `main`: `supabase/functions/`, `scripts/db/seed-quests.mjs` |
+| Prompt tuning, demo-account seeding | Justin | ⬜ | |
 | Pitch | Vishaal | ⬜ | |
 | Fog renderer + H3 `ExplorationStore` | Ayman | ⬜ (branch `feature/ayman-map-fog` exists, no commits yet) | |
 | Design system, screens, `AuthService` | Jonathan | ⬜ nothing pushed yet | |
 
-**What works today:** run `FogOfWar/FogOfWar.xcodeproj` on the iPhone Simulator. The joystick moves you, tiles clear (shown as blue dots until Ayman's fog lands), expeditions track distance, tiles and time, the quest unlocks within 40 m, a photo "verifies" against the mock backend and becomes a sticker, and the recap card can be shared. Everything uses `MockFogAPI` and `GridExplorer` stand-ins.
+**What works today:** run `FogOfWar/FogOfWar.xcodeproj` on the iPhone Simulator against the **live Supabase backend**: anonymous sign-in, today's real campus quest from OpenStreetMap, Ayman's H3 fog clearing with the joystick, expeditions, and sync of tiles/pings/expeditions to the cloud. Photo verification reaches the server but Gemini is currently unreliable (`verifier_unavailable`).
 
 **Changed since the original plan:**
 - Vishaal hands over all remaining technical work to Justin and focuses on the pitch full-time (§13, §15).
@@ -39,18 +40,11 @@ Only work that's been pushed to GitHub is counted.
 
 1. ~~Create the Supabase project and Gemini key~~ ✅ Done; keys are in `.env` (never committed). Gemini works but is intermittently slow/overloaded (503s, 38–51 s responses): `verify-quest` must use low thinking, retries and a ~10 s cap.
 2. ~~Settle the open decisions in `docs/api.md` and remove the quest reveal~~ ✅ Done: D1–D12 accepted as proposed; `reveal_radius_m` and `reveal` removed from the contract and mocks (API v0.2).
-3. **Align `FogNetworking` with `docs/api.md`.** My provisional shapes in `APIModels.swift` differ in several places:
-   - coordinates are `{ "lat", "lng" }`, not `{ "latitude", "longitude" }`
-   - `sync`: pings use `ts` (with milliseconds) / `lat` / `lng` / `accuracy_m` / `speed_mps`; tiles use `h3`; expeditions have no route segments (the server builds routes from pings) and must be sent with any batch containing their pings; limits are 5000 tiles / 2000 pings / 50 expeditions
-   - `quest-today`: new wrapper (`status`, `found_today`, `completed_by_me`, `attempts_left`, `resets_at`); the quest has `place_name`, `geofence_radius_m`, no `title`
-   - `verify-quest`: request sends `lat`, `lng`, `accuracy_m`, `photo_jpeg_base64` **and** `sticker_png_base64` (≤ 512 px); response has `attempts_left`, `completion.sticker_url`, `streak`; the client must **not** re-check confidence. Drop `StickerStorage` (D3: the server uploads)
-   - error envelope: map `too_far`, `already_completed`, `no_attempts_left`, `not_todays_quest` and `verifier_unavailable` (retry, doesn't use an attempt) to `QuestCaptureModel` states; on any 401, refresh the token and retry once
-   - `profile`: new sticker shape, `missed_days`, `expeditions`, `routes`; add `POST profile` (username) for Jonathan's onboarding
-   - use the files in `docs/mocks/` as test fixtures, and make `MockFogAPI` return them
-4. **Write the Edge Functions** in `supabase/functions/` (TypeScript; install the CLI with `brew install supabase/tap/supabase`), test locally against `supabase start`: `quest-today` → `sync` → `profile` (GET + POST) → `verify-quest`.
+3. ~~Align `FogNetworking` with `docs/api.md`~~ ✅ Done: all request/response types match v0.2 and are tested against every file in `docs/mocks`; error codes map to quest states; 401 → refresh token and retry once; `StickerStorage` upload removed (D3); `POST profile` added. 57 FogKit tests pass.
+4. ~~Write the Edge Functions~~ ✅ Done and deployed: `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST). Local smoke test 24/24 (`npm run functions:smoke`). **Blocked on Gemini reliability:** verification currently returns `verifier_unavailable`; switch model via the `GEMINI_MODEL` secret once one responds.
 5. **Write and tune the `verify-quest` prompt** (Gemini vision) with a folder of test photos: real objects, photos of screens, wrong objects.
-6. **Cloud setup:** ~~link, push migrations, buckets, Gemini secret~~ ✅ done. Remaining: deploy the functions, put the project URL + publishable key in `FogOfWarApp.swift`.
-7. **Seed data:** hand-pick campus quest targets into `daily_quests`; seed the demo account (past expeditions, stickers, a streak).
+6. ~~Cloud setup~~ ✅ Done: migrations, buckets, Gemini secret, functions deployed; the app talks to the live project (`Config/SupabaseConfig.swift`) with FogKit's `SupabaseAnonymousAuth` (anonymous sign-in, Keychain session, token refresh). Verified on a clean Simulator install: real quest loads, tiles and pings sync.
+7. **Seed data:** ✅ quests seeded from OpenStreetMap for 2026-11-21 → 27 (`npm run db:seed-quests`). Remaining: seed the demo account (past expeditions, stickers, a streak) and a hand-placed stage-demo quest (D11).
 8. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
 9. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.
 10. **Test on a real iPhone:** walking GPS, background location with the screen locked, camera, Vision sticker cutout.
@@ -502,9 +496,9 @@ Vishaal wrote the API contract and the database schema, then handed all remainin
 - [x] In-app camera (`AVCaptureSession`), no photo library access (Q-6). *Untested on a real phone*
 - [x] `StickerExtractor` with `VNGenerateForegroundInstanceMaskRequest`, circular-crop fallback (Q-8). *Untested on a real phone*
 - [x] On-device fallback (`VNClassifyImageRequest`) behind the debug toggle (§14)
-- [ ] 🟡 `APIClient` for the four Edge Functions, built against Vishaal's API contract (mock responses until the functions are live). *Built against provisional shapes; needs aligning with `docs/api.md` (§0)*
-- [ ] 🟡 `SyncQueue` (cleared tiles + location pings, batched) and `StickerStorage` upload (F-3 sync). *Queue works offline and batches; payload/limits need aligning; `StickerStorage` likely dropped (D3)*
-- [ ] 🟡 `QuestService.today()` and `ProfileModel` (stats, streak, sticker list, weekly activity) feeding Jonathan's views (Q-11, P-3, P-5). *Working against the mock; response shapes need aligning*
+- [x] `APIClient` for the four Edge Functions, matching `docs/api.md` v0.2 (contract-tested against `docs/mocks`)
+- [x] `SyncQueue` (cleared tiles + location pings + expedition records, batched per the contract's limits) (F-3 sync). Sticker upload is server-side (D3)
+- [x] `QuestService` and `ProfileModel` (quest status, stats, streak, stickers, missed days, weekly activity, username) feeding Jonathan's views (Q-11, Q-13, P-3, P-5)
 - [x] *(extra)* Xcode app project with FogKit linked, permissions, temporary dev test screen
 
 **Backend (taken over from Vishaal):**
@@ -512,10 +506,10 @@ Vishaal wrote the API contract and the database schema, then handed all remainin
 - [x] Database schema and schema tests *(Vishaal, written for Tiger Data)*
 - [x] Move the schema to Supabase Postgres: plain tables + views, row-level security, tests on Supabase's Postgres image *(Justin)*
 - [x] Supabase project: anonymous sign-in, push migrations, public `stickers` + private `quest-photos` buckets, `GEMINI_API_KEY` secret
-- [ ] Edge Functions `sync`, `quest-today`, `profile` (GET + POST), each taking `user_id` from the verified JWT (§10.1)
-- [ ] `verify-quest` Edge Function: checks, geofence, attempt limit, Gemini vision call, Storage upload on success (Q-7, §10.5)
+- [x] Edge Functions `sync`, `quest-today`, `profile` (GET + POST), each taking `user_id` from the verified JWT (§10.1)
+- [x] `verify-quest` Edge Function: checks, geofence, attempt limit, Gemini vision call, Storage upload on success (Q-7, §10.5). *Gemini itself is unreliable right now*
 - [ ] Prompt tuning with a folder of test photos (real objects, photos of screens, wrong objects)
-- [ ] Hand-seed `daily_quests` for the campus area (OSM Overpass script optional) (Q-1, Q-2, Q-3)
+- [x] Seed `daily_quests` for the campus area from OpenStreetMap (Q-1, Q-2, Q-3)
 - [ ] Seed the demo account (past expeditions, stickers, a streak)
 - [ ] Draw the real demo route in gpx.studio for Auto-Walk
 

@@ -2,15 +2,23 @@ import Foundation
 import Observation
 import FogCore
 
-/// Today's Daily Quest for the user's region (PRD Q-1, Q-11).
-/// Jonathan's quest card reads `today`; Ayman's map reads `today?.target` for the marker (Q-4).
+/// Today's Daily Quest for the user's region (docs/api.md §3, PRD Q-1, Q-11, Q-13).
+/// Jonathan's quest card reads `today` / `status`; Ayman's map reads `today?.target` for the marker.
 @MainActor
 @Observable
 public final class QuestService {
+    /// nil when there's no quest (`status` says why).
     public private(set) var today: Quest?
+    public private(set) var status: QuestStatus?
+    /// When `status == .quietHours`: when the next quest appears.
+    public private(set) var availableAt: Date?
+    /// Next local midnight; refetch after it.
+    public private(set) var resetsAt: Date?
+    public private(set) var regionH3: String?
+    public private(set) var completedByMe = false
+    public private(set) var attemptsLeft = 5
     public private(set) var isLoading = false
     public private(set) var lastError: String?
-    /// When `today` was fetched; refresh again after local midnight (PRD Q-13).
     public private(set) var fetchedAt: Date?
 
     @ObservationIgnored private let api: FogAPI
@@ -22,7 +30,14 @@ public final class QuestService {
         isLoading = true
         defer { isLoading = false }
         do {
-            today = try await api.questToday(at: location).quest
+            let r = try await api.questToday(at: location)
+            today = r.appQuest
+            status = r.status
+            availableAt = r.availableAt
+            resetsAt = r.resetsAt
+            regionH3 = r.regionH3
+            completedByMe = r.completedByMe
+            attemptsLeft = r.attemptsLeft
             fetchedAt = Date()
             lastError = nil
         } catch {
@@ -30,14 +45,15 @@ public final class QuestService {
         }
     }
 
-    /// True if the cached quest is from a previous local day.
-    public func isStale(now: Date = Date(), calendar: Calendar = .current) -> Bool {
-        guard let fetchedAt else { return true }
-        return !calendar.isDate(fetchedAt, inSameDayAs: now)
+    /// True before the first fetch or once `resets_at` has passed.
+    public func isStale(now: Date = Date()) -> Bool {
+        guard fetchedAt != nil, let resetsAt else { return true }
+        return now >= resetsAt
     }
 
-    /// Optimistically bump the "N found today" count after the user's own verified find.
+    /// Update after the user's own verified find, without waiting for a refetch.
     public func recordOwnFind() {
         today?.foundTodayCount += 1
+        completedByMe = true
     }
 }

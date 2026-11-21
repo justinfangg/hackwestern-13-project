@@ -7,17 +7,24 @@ import Testing
 
     func makeModel(_ results: [Result<VerificationResult, Error>]) -> (QuestCaptureModel, StubVerifier) {
         let verifier = StubVerifier(results)
-        let model = QuestCaptureModel(verifier: verifier, extractor: PassthroughExtractor(), remoteStorage: nil,
-                                      localStorage: LocalStickerStorage(directory: tempDirectory()), location: nil)
+        let model = QuestCaptureModel(verifier: verifier, extractor: PassthroughExtractor(),
+                                      stickerCache: LocalStickerStorage(directory: tempDirectory()), location: nil)
         model.setQuest(quest)
         return (model, verifier)
     }
 
     func near(_ metres: Double) -> Coordinate { Geo.offset(quest.target, north: metres, east: 0) }
 
-    static let ok = VerificationResult(verified: true, confidence: 0.9, reason: "bench", attemptsRemaining: 4)
+    static let ok = VerificationResult(verified: true, confidence: 0.9, reason: "bench", attemptsLeft: 4,
+                                       completionID: UUID(), stickerURL: URL(string: "https://x.invalid/s.png"),
+                                       completedAt: Date(), streak: 5)
 
-    @Test func unlocksInsideFortyMetresWithHysteresis() {
+    static func serverError(_ status: Int, _ code: String, distance: Double? = nil) -> APIError {
+        .server(status: status, body: APIErrorBody(code: code, message: code,
+                                                   details: distance.map { .init(distanceM: $0, radiusM: 40, fields: nil) }))
+    }
+
+    @Test func unlocksInsideGeofenceWithHysteresis() {
         let (m, _) = makeModel([])
         m.updateLocation(near(200))
         #expect(m.state == .locked && !m.canCapture)
@@ -30,6 +37,15 @@ import Testing
         #expect(m.state == .locked)
     }
 
+    @Test func startsCompletedOrOutOfAttemptsFromQuestToday() {
+        let a = QuestCaptureModel(verifier: StubVerifier([]), location: nil)
+        a.setQuest(quest, completedByMe: true)
+        #expect(a.state == .alreadyCompleted)
+        let b = QuestCaptureModel(verifier: StubVerifier([]), location: nil)
+        b.setQuest(quest, attemptsLeft: 0)
+        #expect(b.state == .outOfAttempts)
+    }
+
     @Test func captureIgnoredWhileLocked() async {
         let (m, v) = makeModel([.success(Self.ok)])
         m.updateLocation(near(200))
@@ -37,40 +53,88 @@ import Testing
         #expect(v.calls == 0 && m.state == .locked)
     }
 
-    @Test func successCollectsStickerAndNotifies() async {
-        let (m, _) = makeModel([.success(Self.ok)])
+    @Test func successCollectsServerStickerAndNotifies() async {
+        let (m, v) = makeModel([.success(Self.ok)])
         var found: Sticker?
         m.onSuccess = { s, _ in found = s }
-        m.updateLocation(near(10))
+        m.updateLocation(near(10), accuracy: 7.5)
         await m.capture(solidImage())
         guard case .success(let sticker) = m.state else { Issue.record("state \(m.state)"); return }
         #expect(found == sticker)
-        #expect(sticker.category == "bench")
+        #expect(sticker.id == Self.ok.completionID && sticker.imageURL == Self.ok.stickerURL)
+        #expect(sticker.location == quest.target)
         #expect(sticker.localImageURL.map { FileManager.default.fileExists(atPath: $0.path) } == true)
+        #expect(m.streak == 5 && m.attemptsLeft == 4)
+        // The request carries the photo, the cut-out sticker, and the GPS accuracy.
+        let req = try! #require(v.requests.first)
+        #expect(req.accuracyM == 7.5 && !req.photoJpegBase64.isEmpty && !req.stickerPngBase64.isEmpty)
     }
 
-    @Test func lowConfidenceIsRejectedWithRetry() async {
-        let weak = VerificationResult(verified: true, confidence: 0.5, reason: "Blurry", attemptsRemaining: 3)
-        let (m, _) = makeModel([.success(weak), .success(Self.ok)])
+    @Test func serverVerdictIsFinalNoClientThreshold() async {
+        // Low confidence but verified by the server: accept (docs/api.md §4).
+        var lowButVerified = Self.ok
+        lowButVerified.confidence = 0.4
+        let (m, _) = makeModel([.success(lowButVerified)])
         m.updateLocation(near(10))
         await m.capture(solidImage())
-        #expect(m.state == .rejected(reason: "Blurry", attemptsRemaining: 3))
+        if case .success = m.state {} else { Issue.record("expected success, got \(m.state)") }
+    }
+
+    @Test func rejectedAllowsRetry() async {
+        let no = VerificationResult(verified: false, confidence: 0.3, reason: "Looks like a screen", attemptsLeft: 3)
+        let (m, _) = makeModel([.success(no), .success(Self.ok)])
+        m.updateLocation(near(10))
+        await m.capture(solidImage())
+        #expect(m.state == .rejected(reason: "Looks like a screen", attemptsLeft: 3))
         m.retry()
         #expect(m.state == .ready)
         await m.capture(solidImage())
         if case .success = m.state {} else { Issue.record("expected success, got \(m.state)") }
     }
 
-    @Test func noAttemptsLeft() async {
-        let no = VerificationResult(verified: false, confidence: 0.1, reason: "No bench", attemptsRemaining: 0)
+    @Test func noAttemptsLeftAfterRejection() async {
+        let no = VerificationResult(verified: false, confidence: 0.1, reason: "No bench", attemptsLeft: 0)
         let (m, _) = makeModel([.success(no)])
         m.updateLocation(near(10))
         await m.capture(solidImage())
         #expect(m.state == .outOfAttempts)
     }
 
+    @Test func mapsServerErrorCodesToStates() async {
+        let cases: [(APIError, QuestCaptureModel.State)] = [
+            (Self.serverError(422, "too_far", distance: 87.2), .tooFar(distanceMeters: 87.2)),
+            (Self.serverError(409, "already_completed"), .alreadyCompleted),
+            (Self.serverError(429, "no_attempts_left"), .outOfAttempts),
+        ]
+        for (error, expected) in cases {
+            let (m, _) = makeModel([.failure(error)])
+            m.updateLocation(near(10))
+            await m.capture(solidImage())
+            #expect(m.state == expected)
+        }
+    }
+
+    @Test func verifierUnavailableIsRetryable() async {
+        let (m, _) = makeModel([.failure(Self.serverError(502, "verifier_unavailable")), .success(Self.ok)])
+        m.updateLocation(near(10))
+        await m.capture(solidImage())
+        guard case .error(let message) = m.state else { Issue.record("state \(m.state)"); return }
+        #expect(message.contains("didn't use an attempt"))
+        m.retry()
+        #expect(m.state == .ready)
+    }
+
+    @Test func staleQuestTriggersRefetch() async {
+        let (m, _) = makeModel([.failure(Self.serverError(422, "not_todays_quest"))])
+        var stale = false
+        m.onQuestStale = { stale = true }
+        m.updateLocation(near(10))
+        await m.capture(solidImage())
+        #expect(stale)
+    }
+
     @Test func networkErrorAllowsRetry() async {
-        let (m, _) = makeModel([.failure(APIError.invalidResponse)])
+        let (m, _) = makeModel([.failure(URLError(.notConnectedToInternet))])
         m.updateLocation(near(10))
         await m.capture(solidImage())
         guard case .error = m.state else { Issue.record("state \(m.state)"); return }
@@ -125,6 +189,7 @@ import Testing
         #expect(explorer.cleared.count == tilesBeforeCapture)
         #expect(services.profile.stickers.count == 1)
         #expect(services.quests.today?.foundTodayCount == quest.foundTodayCount + 1)
+        #expect(services.quests.completedByMe)
 
         let summary = try #require(services.expeditions.end())
         #expect(summary.sticker != nil)

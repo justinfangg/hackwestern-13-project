@@ -48,14 +48,11 @@ public final class FogServices {
         let debug = debug ?? DebugSettings()
         self.debug = debug
 
-        let storage: StickerUploading?
         if let auth, let backend, !debug.useMockBackend {
             api = LiveFogAPI(config: backend, auth: auth)
-            storage = SupabaseStickerStorage(config: backend, auth: auth)
             usingMockBackend = false
         } else {
             api = MockFogAPI()
-            storage = nil
             usingMockBackend = true
         }
 
@@ -66,8 +63,8 @@ public final class FogServices {
         pipeline = ExplorationPipeline(location: location, explorer: explorer, expeditions: expeditions)
         quests = QuestService(api: api)
         remoteVerifier = RemoteQuestVerifier(api: api)
-        questCapture = QuestCaptureModel(verifier: remoteVerifier, remoteStorage: storage,
-                                         localStorage: LocalStickerStorage(directory: storageDirectory?.appendingPathComponent("stickers")),
+        questCapture = QuestCaptureModel(verifier: remoteVerifier,
+                                         stickerCache: LocalStickerStorage(directory: storageDirectory?.appendingPathComponent("stickers")),
                                          location: location)
         profile = ProfileModel(api: api, history: history)
 
@@ -87,7 +84,7 @@ public final class FogServices {
     public func refreshQuest() async {
         let here = location.currentCoordinate ?? .westernCampus
         await quests.refresh(at: here)
-        questCapture.setQuest(quests.today)
+        questCapture.setQuest(quests.today, completedByMe: quests.completedByMe, attemptsLeft: quests.attemptsLeft)
     }
 
     /// Demo "Reset fog" (PRD D-6).
@@ -104,6 +101,13 @@ public final class FogServices {
 
         pipeline.onTilesCleared = { sync.enqueue(tiles: $0) }
         pipeline.onPing = { sync.enqueue(ping: $0) }
+        // Batches with pings for the running expedition must carry its current record (docs/api.md §2).
+        sync.activeExpedition = { [weak expeditions] in
+            expeditions?.active.map {
+                ExpeditionRecord(id: $0.id, startedAt: $0.startedAt, endedAt: nil,
+                                 distanceM: $0.distanceMeters, newTiles: $0.newTiles)
+            }
+        }
 
         expeditions.onEnd = { summary in
             history.add(summary)
@@ -111,6 +115,9 @@ public final class FogServices {
             Task { await sync.flush() }
         }
 
+        questCapture.onQuestStale = { [weak self] in
+            Task { await self?.refreshQuest() }
+        }
         questCapture.onSuccess = { sticker, quest in
             expeditions.attach(sticker)
             quests.recordOwnFind()

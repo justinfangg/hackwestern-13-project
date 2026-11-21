@@ -49,3 +49,13 @@ Views use `security_invoker = on`, so the tables' row-level security also protec
 2. `supabase login`, then `supabase link --project-ref <ref>`.
 3. `npm run db:push`.
 4. Edge Function secrets: `supabase secrets set GEMINI_API_KEY=...`. Edge Functions already get `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_DB_URL` automatically.
+
+## Quests
+Daily quests come from real objects in OpenStreetMap (PRD §10.4), so the target actually exists.
+- `supabase/seed/osm-western-campus.json`: a trimmed Overpass snapshot of Western's main campus (benches, street lamps, trees, mailbox, named buildings).
+- `node scripts/db/seed-quests.mjs [--days 7] [--start YYYY-MM-DD] > supabase/seed/quests.sql` picks one object per H3 res 7 region per day, rotating categories, with a hint naming the nearest building. Deterministic, and inserts with `on conflict do nothing`, so re-running never overwrites an existing quest.
+- `npm run db:seed-quests` regenerates and applies it to the linked cloud project (the CLI asks for confirmation).
+- Campus covers 2 regions. The UC Hill region (`872ab4634ffffff`) has the most variety; the smaller one has few mapped objects, so its quests repeat.
+- Seeded so far: 2026-11-21 to 2026-11-27. Re-run with `--start` for later dates.
+- For the stage demo (D11), insert a hand-placed quest at the venue for that day before seeding, and it won't be overwritten.
+

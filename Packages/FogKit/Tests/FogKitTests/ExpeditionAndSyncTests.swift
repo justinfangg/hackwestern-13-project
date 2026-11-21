@@ -83,7 +83,7 @@ import Testing
         await api.setFailSync(false)
         await queue.flush()
         #expect(queue.pendingCount == 0)
-        #expect(await api.syncedTiles.map(\.tile) == [TileID(1), TileID(2), TileID(3)])
+        #expect(await api.syncedTiles.map(\.h3) == [TileID(1), TileID(2), TileID(3)])
         #expect(await api.syncedExpeditions.count == 1)
     }
 }

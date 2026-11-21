@@ -9,13 +9,14 @@ public protocol QuestVerifying: Sendable {
     func verify(_ request: VerifyQuestRequest, quest: Quest, image: CGImage) async throws -> VerificationResult
 }
 
-/// Production path: the `verify-quest` Edge Function (vision LLM + server-side geofence, PRD Q-7).
+/// Production path: the `verify-quest` Edge Function (Gemini vision + server-side geofence, PRD Q-7).
+/// Throws `APIError.server` for `too_far`, `already_completed`, `no_attempts_left`, … (docs/api.md §4).
 public struct RemoteQuestVerifier: QuestVerifying {
     private let api: FogAPI
     public init(api: FogAPI) { self.api = api }
 
     public func verify(_ request: VerifyQuestRequest, quest: Quest, image: CGImage) async throws -> VerificationResult {
-        try await api.verifyQuest(request)
+        try await api.verifyQuest(request).result
     }
 }
 
@@ -50,11 +51,11 @@ public actor OnDeviceQuestVerifier: QuestVerifying {
         let wanted = Self.synonyms[quest.category] ?? [quest.category]
         if let match = labels.first(where: { label in wanted.contains { label.identifier.contains($0) } }) {
             return VerificationResult(verified: true, confidence: Double(match.confidence),
-                                      reason: "On-device match: \(match.identifier)", attemptsRemaining: remaining)
+                                      reason: "On-device match: \(match.identifier)", attemptsLeft: remaining)
         }
         let top = labels.prefix(3).map(\.identifier).joined(separator: ", ")
         return VerificationResult(verified: false, confidence: 0,
                                   reason: top.isEmpty ? "Couldn't recognise the object." : "Saw: \(top)",
-                                  attemptsRemaining: remaining)
+                                  attemptsLeft: remaining)
     }
 }

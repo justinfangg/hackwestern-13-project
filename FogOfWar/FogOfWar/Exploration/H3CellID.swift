@@ -5,7 +5,10 @@ import FogKit
 ///
 /// H3 indexes are unsigned 64-bit integers. They are encoded as canonical,
 /// lowercase hexadecimal strings at persistence and synchronization boundaries.
-public struct H3CellID: RawRepresentable, Hashable, Comparable, Sendable {
+///
+/// Marked `nonisolated` so the type stays usable from MapKit's off-main
+/// overlay draw calls under the app's default MainActor isolation.
+nonisolated public struct H3CellID: RawRepresentable, Hashable, Comparable, Sendable {
     public let rawValue: UInt64
 
     public init(rawValue: UInt64) {

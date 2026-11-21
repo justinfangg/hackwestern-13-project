@@ -2,14 +2,16 @@ import CoreLocation
 import Foundation
 
 /// Describes which system initiated an exploration update.
-public enum ExplorationSource: String, Codable, Hashable, Sendable {
+nonisolated public enum ExplorationSource: String, Codable, Hashable, Sendable {
     case location
+    /// Retained for Codable compatibility. The old debug tap-to-reveal UI that
+    /// bypassed FogKit was removed so exploration stays on the location pipeline.
     case debugTap = "debug_tap"
     case external
 }
 
 /// A single incremental reveal published after its cells are persisted.
-public struct ExplorationChange: Identifiable, Sendable {
+nonisolated public struct ExplorationChange: Identifiable, Sendable {
     public let id: UUID
     public let newlyClearedCells: Set<H3CellID>
     public let source: ExplorationSource

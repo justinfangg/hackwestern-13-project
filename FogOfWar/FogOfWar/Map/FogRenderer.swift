@@ -28,6 +28,10 @@ final class FogRenderer: MKOverlayRenderer {
     private let primaryTexture: CGImage?
     private let secondaryTexture: CGImage?
     private let clearingGradient: CGGradient?
+    /// Soft circular mask for settled (fully revealed) cells. Drawn via `CGContext.draw`
+    /// instead of `drawRadialGradient`, which is cheaper when many cells are punched
+    /// every atmospheric redraw. Animating cells still use the live gradient.
+    private let settledClearMask: CGImage?
     private let revealBloomGradient: CGGradient?
 
     private lazy var displayLinkProxy = FogDisplayLinkProxy(renderer: self)
@@ -60,6 +64,7 @@ final class FogRenderer: MKOverlayRenderer {
             ],
             locations: [0, 0.68, 0.82, 1]
         )
+        settledClearMask = Self.makeSettledClearMask(size: 128)
         revealBloomGradient = Self.makeGradient(
             colors: [
                 appearance.tealGlowColor.withAlphaComponent(0.20),
@@ -284,7 +289,7 @@ final class FogRenderer: MKOverlayRenderer {
         time: CFTimeInterval,
         context: CGContext
     ) {
-        guard let clearingGradient, !geometries.isEmpty else { return }
+        guard !geometries.isEmpty else { return }
 
         context.saveGState()
         context.setBlendMode(.destinationOut)
@@ -302,17 +307,31 @@ final class FogRenderer: MKOverlayRenderer {
             let center = point(for: geometry.centerMapPoint)
             let settledRadius = projectedRadius(of: geometry) * appearance.clearMaskRadiusScale
             let dispersalScale = 0.74 + 0.26 * progress
+            let radius = settledRadius * dispersalScale
 
             context.saveGState()
             context.setAlpha(progress)
-            context.drawRadialGradient(
-                clearingGradient,
-                startCenter: center,
-                startRadius: 0,
-                endCenter: center,
-                endRadius: settledRadius * dispersalScale,
-                options: []
-            )
+            if progress >= 0.999, let settledClearMask {
+                let diameter = radius * 2
+                context.draw(
+                    settledClearMask,
+                    in: CGRect(
+                        x: center.x - radius,
+                        y: center.y - radius,
+                        width: diameter,
+                        height: diameter
+                    )
+                )
+            } else if let clearingGradient {
+                context.drawRadialGradient(
+                    clearingGradient,
+                    startCenter: center,
+                    startRadius: 0,
+                    endCenter: center,
+                    endRadius: radius,
+                    options: []
+                )
+            }
             context.restoreGState()
         }
 
@@ -410,8 +429,10 @@ final class FogRenderer: MKOverlayRenderer {
         }
 
         var dirtyRect = animationUpdate.dirtyMapRect
+        let atmosphericFPS = appearance.atmosphericFramesPerSecond
         if atmosphericMotionEnabled,
-           now - lastAtmosphericInvalidation >= 1 / appearance.atmosphericFramesPerSecond,
+           atmosphericFPS > 0,
+           now - lastAtmosphericInvalidation >= 1 / atmosphericFPS,
            let visibleRect = visibleMapRectProvider?()
         {
             lastAtmosphericInvalidation = now
@@ -422,7 +443,8 @@ final class FogRenderer: MKOverlayRenderer {
             setNeedsDisplay(dirtyRect)
         }
 
-        link.isPaused = !atmosphericMotionEnabled && !animationUpdate.hasActiveAnimations
+        link.isPaused = !(atmosphericMotionEnabled && atmosphericFPS > 0)
+            && !animationUpdate.hasActiveAnimations
     }
 
     @MainActor
@@ -505,6 +527,44 @@ final class FogRenderer: MKOverlayRenderer {
             colors: colors.map(\.cgColor) as CFArray,
             locations: locations
         )
+    }
+
+    /// Rasterises the settled clear falloff once. Matches the live clearing
+    /// gradient's opaque core + soft rim so the swap is visually invisible.
+    private static func makeSettledClearMask(size: Int) -> CGImage? {
+        guard size > 0,
+              let context = CGContext(
+                  data: nil,
+                  width: size,
+                  height: size,
+                  bitsPerComponent: 8,
+                  bytesPerRow: 0,
+                  space: CGColorSpaceCreateDeviceRGB(),
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ),
+              let gradient = makeGradient(
+                  colors: [
+                      UIColor(white: 1, alpha: 1),
+                      UIColor(white: 1, alpha: 1),
+                      UIColor(white: 1, alpha: 0.72),
+                      UIColor(white: 1, alpha: 0)
+                  ],
+                  locations: [0, 0.68, 0.82, 1]
+              )
+        else {
+            return nil
+        }
+
+        let center = CGPoint(x: CGFloat(size) / 2, y: CGFloat(size) / 2)
+        context.drawRadialGradient(
+            gradient,
+            startCenter: center,
+            startRadius: 0,
+            endCenter: center,
+            endRadius: CGFloat(size) / 2,
+            options: []
+        )
+        return context.makeImage()
     }
 
     /// Produces a seamless periodic cloud texture once. Integer-frequency waves

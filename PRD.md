@@ -178,7 +178,7 @@ TabView
     └── Expedition history
 ```
 
-Onboarding (P0, minimal): sign in with Apple, then location permission explainer ("When In Use" first, then ask for "Always" when the user starts their first expedition), then camera permission prompted at first quest.
+Onboarding (P0, minimal): pick a username (creates a Supabase anonymous account in the background), then location permission explainer ("When In Use" first, then ask for "Always" when the user starts their first expedition), then camera permission prompted at first quest.
 
 ## 10. Technical Architecture
 
@@ -193,7 +193,7 @@ Onboarding (P0, minimal): sign in with Apple, then location permission explainer
 | Location | Core Location (`CLLocationUpdate.liveUpdates()`) | Native async stream; background support |
 | Database | **Tiger Data** (Tiger Cloud: Postgres + TimescaleDB + PostGIS) | Hackathon prize track. GPS breadcrumbs are time-series data, so they go in a hypertable; continuous aggregates power stats; PostGIS for the quest geofence |
 | Backend services | **Supabase**, for Auth, Storage and Edge Functions only (no Supabase database) | Sign-in, sticker image hosting, and server code without running our own server; `supabase-swift` SDK |
-| Auth | Sign in with Apple (via Supabase Auth) | One tap |
+| Auth | **Supabase anonymous sign-in** + username | No Apple Developer account on the team, so Sign in with Apple isn't available. Anonymous sign-in still issues a real user id and JWT, so the backend is unchanged |
 | AI verification | Vision LLM called from a Supabase Edge Function (**Claude Haiku 5.5** for speed and cost; **Claude Sonnet 5.5** if accuracy is lacking) | API key stays server-side; structured JSON output |
 | Sticker extraction | **On-device** `VNGenerateForegroundInstanceMaskRequest` (Apple's "lift subject" API) | Free, instant, offline, no server round-trip |
 | Quest object source | OpenStreetMap via Overpass API (pre-fetched) | Has benches, street lamps, trees, hydrants, artwork with exact coordinates |
@@ -205,7 +205,7 @@ Leaflet, Mapbox GL JS and Turf.js from the brainstorm are web-only and don't app
 
 ```
 iOS app
-  │  Supabase Auth (Sign in with Apple) → JWT
+  │  Supabase Auth (anonymous sign-in) → JWT
   │
   ├── Supabase Storage ← sticker PNGs and quest photos (uploaded directly by the app)
   │
@@ -423,14 +423,16 @@ F-6, F-7 (fog animation and soft edges) · Q-10 (sticker and Quest Reveal animat
 
 ### Team split
 
+Vishaal doesn't have a Mac, so he owns everything that runs off-device (database, server functions, AI prompt, quest data) plus the pitch. All Swift/Xcode work is split across Ayman, Justin and Jonathan.
+
 | Member | Area | Requirements | Modules (§10.7) |
 |---|---|---|---|
-| **Ayman** | Map & fog | F-1, F-2, F-3 (local), F-5, F-6, F-7, Q-4, Q-9, Quest Reveal wave in Q-10 | `Map/`, `Exploration/` |
-| **Justin** | Location, expeditions, demo mode & quest capture/verification | F-4, F-8, E-1, E-3, E-4, P-2, D-1–D-6, Q-5 (logic), Q-6, Q-7, Q-8 | `Location/`, `Expedition/` (logic), `Debug/`, `Quest/` (camera, sticker extraction, verification), `verify-quest` Edge Function |
-| **Jonathan** | Front-end design & quest experience | Design system (§10.8), quest sheet UI, sticker peel in Q-10, Q-12, E-2, E-5, P-1, P-4, onboarding screens | `DesignSystem/`, `Quest/` (views & animations), `Expedition/ExpeditionCardView`, `Profile/StickerBookView` |
-| **Vishaal** | Backend (Tiger Data + Supabase), quest data & Profile | F-3 (sync), Q-1, Q-2, Q-3, Q-11, Q-13, P-3, P-5, auth logic (§9) | `Backend/`, `Profile/`, `App/`, Tiger Data schema, Edge Functions except `verify-quest` |
+| **Ayman** | Map, fog & path tracing | F-1, F-2, F-3 (local), F-5, F-6, F-7, Q-4, Q-9, Quest Reveal wave in Q-10, P-2 | `Map/`, `Exploration/`, `Profile/PathTraceMapView` |
+| **Justin** | Location, expeditions, demo mode, quest capture & app networking | F-3 (sync client), F-4, F-8, E-1, E-3, E-4, D-1–D-6, Q-5 (logic), Q-6, Q-8, Q-11 (data) | `Location/`, `Expedition/` (logic), `Debug/`, `Quest/` (camera, sticker extraction, `QuestService`), `Backend/` (except `AuthService`) |
+| **Jonathan** | Front-end design, quest experience, Profile UI & sign-in | Design system (§10.8), quest sheet UI, sticker peel in Q-10, Q-12, Q-13 (UI), E-2, E-5, P-1, P-3, P-4, P-5 (chart UI), onboarding + sign-in (§9) | `DesignSystem/`, `Quest/` (views & animations), `Expedition/ExpeditionCardView`, `Profile/` (except path trace), `Backend/AuthService`, `App/` |
+| **Vishaal** | Backend (Tiger Data + Supabase), AI verification, quest data & pitch | Q-1, Q-2, Q-3, Q-7, Q-11 (backend), Q-13 (backend), P-5 (data), server side of F-3 | Tiger Data schema, all Edge Functions (TypeScript), OSM seeding script, pitch |
 
-#### Ayman: Map & fog
+#### Ayman: Map, fog & path tracing
 - [ ] `FogMapView` (`UIViewRepresentable` around `MKMapView`), recentering, pan/zoom (F-1, F-5)
 - [ ] `FogOverlay` + `FogRenderer`: fog fill, hex holes with `CGBlendMode.clear`, partial invalidation (§10.2)
 - [ ] H3 integration and `TileMath`: point → cell, `gridDisk` for the 30 m vision radius (F-2)
@@ -438,81 +440,86 @@ F-6, F-7 (fog animation and soft edges) · Q-10 (sticker and Quest Reveal animat
 - [ ] Low-zoom performance: coarse parent-cell drawing, 60 fps with 10k tiles (F-5)
 - [ ] Quest marker annotation that stays visible above the fog (Q-4)
 - [ ] Quest Reveal: clear 150 m around the target, with an expanding-wave animation (Q-9, Q-10)
+- [ ] Path-tracing map in Profile: all routes drawn over the cleared area, reusing the fog renderer (P-2)
 - [ ] Polish: fog dissolve on clear, drifting cloud texture, soft edges (F-6, F-7)
 
-#### Justin: Location, expeditions, demo mode & quest capture/verification
+#### Justin: Location, expeditions, demo mode, quest capture & app networking
 - [ ] `LocationProvider` protocol + `RealLocationProvider` (`CLLocationUpdate.liveUpdates`)
 - [ ] `FixFilter` (accuracy/speed/dedupe) and the 10 m interpolator (F-4, F-8)
 - [ ] `ExpeditionManager`: Start/End, path, distance, duration, new tiles (E-1)
 - [ ] Background location during an active expedition (E-4)
 - [ ] Recap-card data (`ExpeditionSummary`) + `ImageRenderer`/`ShareLink` export of Jonathan's card view (E-3)
-- [ ] Simulator Mode: hidden toggle, joystick, GPX Auto-Walk, Reset fog (D-1–D-6)
-- [ ] Hand accepted fixes to `SyncQueue` as location pings, tagged with the expedition id
-- [ ] Path-tracing map in Profile, drawn from expedition routes (P-2)
-- [ ] Record the demo GPX route on the Western campus and the backup demo video
+- [ ] Simulator Mode: hidden toggle, joystick (by hour 10), GPX Auto-Walk, Reset fog (D-1–D-6)
 - [ ] `QuestCaptureModel`: geofence gate (within 40 m → `canCapture`), state machine idle → capturing → verifying → success/failure (Q-5)
 - [ ] In-app camera (`AVCaptureSession`), no photo library access (Q-6)
 - [ ] `StickerExtractor` with `VNGenerateForegroundInstanceMaskRequest`, circular-crop fallback (Q-8)
-- [ ] `verify-quest` Edge Function: server-side 40 m check, attempt limit, vision model call, JSON parsing (Q-7, §10.5)
-- [ ] Prompt tuning against real photos and photos of screens; confidence threshold
 - [ ] On-device fallback (`VNClassifyImageRequest`) behind the debug toggle (§14)
+- [ ] `APIClient` for the four Edge Functions, built against Vishaal's API contract (mock responses until the functions are live)
+- [ ] `SyncQueue` (cleared tiles + location pings, batched) and `StickerStorage` upload (F-3 sync)
+- [ ] `QuestService.today()` and `ProfileModel` (stats, streak, sticker list, weekly activity) feeding Jonathan's views (Q-11, P-3, P-5)
 
-#### Jonathan: Front-end design & quest experience
+#### Jonathan: Front-end design, quest experience, Profile UI & sign-in
 - [ ] Hour 3: `Theme` (colours, fonts, spacing, radii) + placeholder components on `main`; low-fi mockups of Map tab, quest sheet, recap card, Profile (§10.8)
 - [ ] `DesignSystem` components: `QuestCard`, `PrimaryButton`, `StickerTile`, `StatTile`, sheet styles
 - [ ] Fog art direction for Ayman: colour, texture reference, edge style
-- [ ] Quest sheet UI on top of Justin's `QuestCaptureModel`: hint → camera → verifying → result
+- [ ] Quest sheet UI on top of Justin's `QuestCaptureModel`: hint → camera → verifying → result; "N found today" on the quest card
 - [ ] Failed-verification retry UI showing the model's reason (Q-12)
 - [ ] Sticker "peel off" animation into the collection (Q-10)
 - [ ] Expedition recap card design, 9:16 story layout (E-2, E-5)
-- [ ] Sticker book grid + sticker detail (P-1); expedition history list (P-4)
-- [ ] Onboarding and permission screens (§9), on top of Vishaal's auth logic
+- [ ] Profile tab: stats + streak (P-3), sticker book grid + detail with missed-day silhouettes (P-1, Q-13), expedition history (P-4), weekly activity chart with Swift Charts (P-5)
+- [ ] `AuthService`: Supabase anonymous sign-in via `supabase-swift`, session kept in the Keychain, username saved to `profiles`
+- [ ] Onboarding and permission screens (§9)
 - [ ] App icon; design pass over every screen in the demo flow before feature freeze
 
-#### Vishaal: Backend, quest data & Profile
+#### Vishaal: Backend, AI verification, quest data & pitch
+No Mac needed: everything below runs in a browser, a terminal, or Deno/TypeScript on any OS.
+
+- [ ] **Hour 3: API contract** in `docs/api.md`: request/response JSON examples for `sync`, `quest-today`, `verify-quest`, `profile`, so Justin can build `APIClient` against mocks
 - [ ] Tiger Cloud service: schema from §10.6, PostGIS, `location_pings` hypertable, continuous aggregates, compression policy
-- [ ] Supabase project (Auth + Storage + Edge Functions only); Tiger connection string in Edge Function secrets
-- [ ] Edge Functions `sync`, `quest-today`, `profile`, each taking `user_id` from the verified JWT (§10.1)
-- [ ] Sign in with Apple via Supabase Auth; permission-request logic for onboarding (§9)
-- [ ] `AuthService`, `APIClient`, `StickerStorage`, `SyncQueue` (F-3 sync)
-- [ ] Hand-seed `daily_quests` for the Western campus area; `QuestService` fetch for the user's region (Q-1, Q-2, Q-3)
-- [ ] "N found today" aggregate view and its display on the quest card (Q-11)
-- [ ] Midnight reset and missed-day silhouettes (Q-13)
-- [ ] Profile tab shell + `ProfileModel` (stats, streak, sticker list) feeding Jonathan's sticker book; stats display (P-3)
-- [ ] Weekly activity chart from continuous aggregates (P-5); this is the Tiger Data showcase in the pitch
-- [ ] Seeded demo account; pitch slides
+- [ ] Supabase project: anonymous sign-in enabled, Storage bucket for stickers, Tiger connection string in Edge Function secrets
+- [ ] Edge Functions `sync`, `quest-today`, `profile` (TypeScript), each taking `user_id` from the verified JWT (§10.1)
+- [ ] `verify-quest` Edge Function: server-side 40 m check, attempt limit, vision model call, JSON parsing (Q-7, §10.5)
+- [ ] Prompt tuning with `curl` and a folder of test photos (real objects, photos of screens, wrong objects); pick the confidence threshold
+- [ ] OSM Overpass script to load benches/lamps/trees/etc. for the campus area; hand-seed `daily_quests` (Q-1, Q-2, Q-3)
+- [ ] "N found today", streak, midnight reset and weekly activity queries for the `profile` and `quest-today` responses (Q-11, Q-13, P-5)
+- [ ] Seed the demo account's data (past expeditions, stickers, a streak) directly in Tiger Data
+- [ ] Draw the demo route in a web GPX editor (e.g. gpx.studio) for Justin's Auto-Walk
+- [ ] **Pitch (from hour 24):** slides, 3-minute script, Tiger Data prize talking points, Devpost write-up, coordinate the backup demo video, run rehearsals
+
+Vishaal tests his work without the app: `curl` against the Edge Functions and SQL queries in the Tiger console. From hour 18 he joins integration testing by watching the data land in Tiger Data while someone else runs the app.
 
 #### Shared interfaces (agree in hours 0–3)
 | Interface | Owner | Used by |
 |---|---|---|
+| API contract (`docs/api.md`) | Vishaal | Justin (`APIClient`) |
 | `LocationProvider` (async stream of `CLLocation`) | Justin | Ayman (clearing), Justin (quest geofence) |
-| `ExplorationStore.clear(cells:)` / `isCleared(_:)` / `clearedCells` | Ayman | Justin (expedition tile counts), Vishaal (sync), Justin (Quest Reveal trigger on verification success) |
-| `Quest` model + `QuestService.today()` | Vishaal | Jonathan (quest sheet), Ayman (marker) |
-| `QuestCaptureModel` (state, `canCapture`, `capture()`, `VerificationResult`) | Justin | Jonathan (quest sheet UI), Vishaal (completion record, streak) |
+| `ExplorationStore.clear(cells:)` / `isCleared(_:)` / `clearedCells` | Ayman | Justin (expedition tile counts, sync, Quest Reveal trigger) |
+| `Quest` model + `QuestService.today()` | Justin | Jonathan (quest sheet), Ayman (marker) |
+| `QuestCaptureModel` (state, `canCapture`, `capture()`, `VerificationResult`) | Justin | Jonathan (quest sheet UI) |
 | `ExpeditionSummary` (route, distance, time, new tiles, sticker) | Justin | Jonathan (recap card) |
+| `ProfileModel` (stats, streak, stickers, weekly activity, routes) | Justin | Jonathan (Profile UI), Ayman (path trace) |
 | `Theme` + `DesignSystem` components | Jonathan | Everyone |
-| `APIClient` (Edge Function calls) + `Sticker` model + `StickerStorage` upload | Vishaal | Justin (sticker upload), Jonathan (sticker book) |
+| `AuthService` (current user, JWT) | Jonathan | Justin (`APIClient`) |
 
 Until an interface is real, each owner ships a mock version on `main` so nobody is blocked.
 
 #### Integration rules
 - **Xcode project:** create it with Xcode 16 and keep its default folder setup (folders sync automatically), so adding files doesn't edit the shared `project.pbxproj`. One person creates the full folder structure from §10.7 in hour 0.
+- **Edge Functions live in the repo** under `supabase/functions/`, so Vishaal's backend code goes through the same PRs as the app.
 - **Small PRs, merged to `main` several times a day.** No branch lives longer than about half a day.
 - **`main` must always build.** Pull before starting work; fix a broken build before anything else.
 - **Hour 18 is the first end-to-end run**, ugly or not: joystick → fog clears → quest → verify → sticker → recap card.
 - **Simulator Mode first:** Justin ships the joystick by hour 10 so everyone can test their feature without walking outside.
 
-Everyone rehearses the demo together during hours 32–36.
-
 ### Timeline
 | Hours | Milestone |
 |---|---|
-| 0–3 | Xcode project, Tiger Cloud service, Supabase project, H3 package compiling, module skeleton on `main` |
+| 0–3 | Xcode project, Tiger Cloud service, Supabase project, H3 package compiling, module skeleton on `main`; API contract (Vishaal) and `Theme` + mockups (Jonathan) |
 | 3–10 | Static fog over MapKit with holes from a hardcoded tile set; joystick moving a dot; camera + subject lift working standalone |
 | 10–18 | End-to-end clearing (location → tiles → fog); verification Edge Function returning JSON; auth + sync |
 | 18–24 | Quest geofence + Quest Reveal; Profile sticker book + path trace; expedition card + share. **Full P0 flow works end to end.** |
-| 24–32 | Polish only: fog animation, reveal animations, card design, empty states, app icon. No new features |
-| 32–36 | Feature freeze. Record a backup demo video, rehearse, prepare a seeded demo account |
+| 24–32 | Polish only: fog animation, reveal animations, card design, empty states, app icon. No new features. Vishaal switches to the pitch |
+| 32–36 | Feature freeze. Record a backup demo video, rehearse the pitch (led by Vishaal), verify the seeded demo account |
 
 ### Demo script (3 min)
 1. Open the app: campus under fog. "This is your city before you've explored it."
@@ -532,6 +539,7 @@ Everyone rehearses the demo together during hours 32–36.
 | OSM objects are missing or misplaced | Hand-picked quest targets for the demo; post-hack, let users report "object not found" and reroll |
 | AI accepts fake photos (photo of a screen) | Prompt asks explicitly about screens and printouts; in-app camera only; GPS geofence checked server-side |
 | Tiger Data free plan is in beta, US East only, no connection pooler | Batch syncs to keep connection count low; open one connection per Edge Function call and close it; ask the Tiger sponsor for credits on a paid plan with pooling |
+| No Apple Developer account: anonymous accounts are lost if the app is deleted; apps installed from Xcode with a free account expire after 7 days | Fine for the hackathon; reinstall from Xcode before the demo. Post-hackathon: let users link an email to their anonymous account (Supabase supports this) |
 | H3 Swift package build issues | Fallback: square grid from quantized lat/lng (`floor(lat / Δ), floor(lng / Δ)`), ~20 m cells, behind the same `TileID` abstraction |
 | Scope creep | §2 is the scope. New ideas go to §16 |
 
@@ -545,6 +553,7 @@ Everyone rehearses the demo together during hours 32–36.
 | Vision radius | Fixed at 30 m | A growing radius would clear streets the user never walked |
 | Feature scope | Two core loops + expedition card + profile + demo mode; everything else cut | A polished core wins more than many half-working features |
 | Database | Tiger Data for all data; Supabase kept only for Auth, Storage and Edge Functions (Option A) | Tiger Data prize track. GPS history is time-series data, which fits Tiger well. Keeping Supabase avoids building our own auth, file storage and API server |
+| Sign-in | Supabase anonymous sign-in + username; no Sign in with Apple | Nobody on the team has a paid Apple Developer account, which Sign in with Apple requires |
 | Name | Keep "Fog of War IRL" for the hackathon | Says exactly what the app does in a 3-minute pitch |
 
 ## 16. Future Ideas (post-hackathon, not in scope)

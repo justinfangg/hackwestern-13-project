@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-21",
+  "region_h3": "872ab4634ffffff",
+  "resets_at": "2026-11-22T05:00:00Z",
+  "status": "active",
+  "available_at": null,
+  "quest": {
+    "id": "b7e4d1c2-5a3f-4c8e-9d16-2f0a7b3c8e91",
+    "category": "bench",
+    "hint": "A wooden bench facing the hill, just below the tower.",
+    "place_name": "University College Hill",
+    "target": {
+      "lat": 43.0087,
+      "lng": -81.2731
+    },
+    "geofence_radius_m": 40,
+    "reveal_radius_m": 150
+  },
+  "found_today": 8,
+  "completed_by_me": false,
+  "attempts_left": 5
+}

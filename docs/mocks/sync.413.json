@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "batch_too_large",
+    "message": "A batch may contain at most 5000 tiles, 2000 pings and 50 expeditions.",
+    "details": {
+      "max_tiles": 5000,
+      "max_pings": 2000,
+      "max_expeditions": 50
+    }
+  }
+}

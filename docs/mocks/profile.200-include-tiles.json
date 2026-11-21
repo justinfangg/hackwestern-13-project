@@ -1,0 +1,376 @@
+{
+  "user_id": "3f6c2a9e-8b1d-4e57-9a0c-5d2e7f4b1a60",
+  "username": "vishaal",
+  "created_at": "2026-11-14T18:55:02Z",
+  "stats": {
+    "tiles_cleared": 138,
+    "distance_m": 1671.7,
+    "quests_completed": 6,
+    "current_streak": 4
+  },
+  "stickers": [
+    {
+      "completion_id": "e2a9c7f1-4b6d-4e83-8a5c-1d7f9b2e3c40",
+      "quest_id": "b7e4d1c2-5a3f-4c8e-9d16-2f0a7b3c8e91",
+      "date": "2026-11-21",
+      "category": "bench",
+      "place": {
+        "lat": 43.0087,
+        "lng": -81.2731
+      },
+      "place_name": "University College Hill",
+      "hint": "A wooden bench facing the hill, just below the tower.",
+      "sticker_url": "https://abcdefghijklmnop.supabase.co/storage/v1/object/public/stickers/3f6c2a9e-8b1d-4e57-9a0c-5d2e7f4b1a60/e2a9c7f1-4b6d-4e83-8a5c-1d7f9b2e3c40.png",
+      "completed_at": "2026-11-21T17:16:04Z"
+    },
+    {
+      "completion_id": "0d3e5f7a-1b2c-4d4e-8f60-718293a4b5c6",
+      "quest_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "date": "2026-11-20",
+      "category": "statue",
+      "place": {
+        "lat": 43.00941,
+        "lng": -81.27412
+      },
+      "place_name": "University College",
+      "hint": "A bronze figure keeps watch near the main doors.",
+      "sticker_url": "https://abcdefghijklmnop.supabase.co/storage/v1/object/public/stickers/3f6c2a9e-8b1d-4e57-9a0c-5d2e7f4b1a60/0d3e5f7a-1b2c-4d4e-8f60-718293a4b5c6.png",
+      "completed_at": "2026-11-20T15:48:31Z"
+    },
+    {
+      "completion_id": "2f4a6c8e-0b1d-4e3f-9a5b-7c9d1e3f5a7b",
+      "quest_id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "date": "2026-11-19",
+      "category": "fire_hydrant",
+      "place": {
+        "lat": 43.01098,
+        "lng": -81.27851
+      },
+      "place_name": "Thames Valley Trail",
+      "hint": "A hydrant where the trail meets the road.",
+      "sticker_url": "https://abcdefghijklmnop.supabase.co/storage/v1/object/public/stickers/3f6c2a9e-8b1d-4e57-9a0c-5d2e7f4b1a60/2f4a6c8e-0b1d-4e3f-9a5b-7c9d1e3f5a7b.png",
+      "completed_at": "2026-11-19T22:05:12Z"
+    },
+    {
+      "completion_id": "4b6d8f0a-2c4e-4f6a-8b0c-2e4f6a8b0c2d",
+      "quest_id": "c3d4e5f6-a7b8-4c9d-8e1f-2a3b4c5d6e7f",
+      "date": "2026-11-18",
+      "category": "mailbox",
+      "place": {
+        "lat": 43.00811,
+        "lng": -81.27495
+      },
+      "place_name": "UCC",
+      "hint": "A red post box outside the student centre.",
+      "sticker_url": "https://abcdefghijklmnop.supabase.co/storage/v1/object/public/stickers/3f6c2a9e-8b1d-4e57-9a0c-5d2e7f4b1a60/4b6d8f0a-2c4e-4f6a-8b0c-2e4f6a8b0c2d.png",
+      "completed_at": "2026-11-18T18:30:40Z"
+    },
+    {
+      "completion_id": "6d8f0b2c-4e6a-4b8d-9f1a-3c5e7a9b1d3f",
+      "quest_id": "d4e5f6a7-b8c9-4d0e-9f2a-3b4c5d6e7f80",
+      "date": "2026-11-15",
+      "category": "lamppost",
+      "place": {
+        "lat": 43.00933,
+        "lng": -81.27222
+      },
+      "place_name": "Middlesex College",
+      "hint": "A lamppost on the path between the colleges.",
+      "sticker_url": "https://abcdefghijklmnop.supabase.co/storage/v1/object/public/stickers/3f6c2a9e-8b1d-4e57-9a0c-5d2e7f4b1a60/6d8f0b2c-4e6a-4b8d-9f1a-3c5e7a9b1d3f.png",
+      "completed_at": "2026-11-15T19:20:55Z"
+    },
+    {
+      "completion_id": "8f0b2d4e-6a8c-4d0f-a2b4-5d7f9b1c3e5a",
+      "quest_id": "e5f6a7b8-c9d0-4e1f-8a3b-4c5d6e7f8091",
+      "date": "2026-11-14",
+      "category": "tree",
+      "place": {
+        "lat": 43.00702,
+        "lng": -81.27644
+      },
+      "place_name": "Weldon Library",
+      "hint": "A big oak on the lawn beside the library.",
+      "sticker_url": "https://abcdefghijklmnop.supabase.co/storage/v1/object/public/stickers/3f6c2a9e-8b1d-4e57-9a0c-5d2e7f4b1a60/8f0b2d4e-6a8c-4d0f-a2b4-5d7f9b1c3e5a.png",
+      "completed_at": "2026-11-14T20:11:09Z"
+    }
+  ],
+  "missed_days": [
+    {
+      "date": "2026-11-17",
+      "category": "tree"
+    },
+    {
+      "date": "2026-11-16",
+      "category": "bench"
+    }
+  ],
+  "weekly_activity": [
+    {
+      "week_start": "2026-09-28",
+      "distance_m": 0,
+      "new_tiles": 0
+    },
+    {
+      "week_start": "2026-10-05",
+      "distance_m": 0,
+      "new_tiles": 0
+    },
+    {
+      "week_start": "2026-10-12",
+      "distance_m": 0,
+      "new_tiles": 0
+    },
+    {
+      "week_start": "2026-10-19",
+      "distance_m": 0,
+      "new_tiles": 0
+    },
+    {
+      "week_start": "2026-10-26",
+      "distance_m": 0,
+      "new_tiles": 0
+    },
+    {
+      "week_start": "2026-11-02",
+      "distance_m": 0,
+      "new_tiles": 0
+    },
+    {
+      "week_start": "2026-11-09",
+      "distance_m": 451.1,
+      "new_tiles": 38
+    },
+    {
+      "week_start": "2026-11-16",
+      "distance_m": 1220.6,
+      "new_tiles": 100
+    }
+  ],
+  "expeditions": [
+    {
+      "id": "9e4b7a1d-2c8f-4d63-b5e0-6a3f1c9d7b28",
+      "started_at": "2026-11-21T17:05:30Z",
+      "ended_at": "2026-11-21T17:22:30Z",
+      "duration_s": 1020,
+      "distance_m": 364.4,
+      "new_tiles": 21
+    },
+    {
+      "id": "5a2d9b7c-3e6f-4a81-9c4d-7e1b2f8a6c35",
+      "started_at": "2026-11-19T21:40:00Z",
+      "ended_at": "2026-11-19T22:18:00Z",
+      "duration_s": 2280,
+      "distance_m": 856.1,
+      "new_tiles": 62
+    },
+    {
+      "id": "1c8f3e2a-7d4b-4f19-8e6a-3b5c9d0e2f71",
+      "started_at": "2026-11-15T19:02:10Z",
+      "ended_at": "2026-11-15T19:26:10Z",
+      "duration_s": 1440,
+      "distance_m": 451.1,
+      "new_tiles": 38
+    }
+  ],
+  "routes": [
+    {
+      "expedition_id": "1c8f3e2a-7d4b-4f19-8e6a-3b5c9d0e2f71",
+      "points": [
+        {
+          "lat": 43.00772,
+          "lng": -81.27586
+        },
+        {
+          "lat": 43.00902,
+          "lng": -81.27357
+        },
+        {
+          "lat": 43.00968,
+          "lng": -81.27108
+        }
+      ]
+    },
+    {
+      "expedition_id": "5a2d9b7c-3e6f-4a81-9c4d-7e1b2f8a6c35",
+      "points": [
+        {
+          "lat": 43.006,
+          "lng": -81.279
+        },
+        {
+          "lat": 43.0085,
+          "lng": -81.28
+        },
+        {
+          "lat": 43.011,
+          "lng": -81.2785
+        },
+        {
+          "lat": 43.0125,
+          "lng": -81.276
+        }
+      ]
+    },
+    {
+      "expedition_id": "9e4b7a1d-2c8f-4d63-b5e0-6a3f1c9d7b28",
+      "points": [
+        {
+          "lat": 43.0105,
+          "lng": -81.2745
+        },
+        {
+          "lat": 43.0095,
+          "lng": -81.2738
+        },
+        {
+          "lat": 43.00885,
+          "lng": -81.273
+        },
+        {
+          "lat": 43.0078,
+          "lng": -81.272
+        }
+      ]
+    }
+  ],
+  "tiles": [
+    "8b2ab46344c0fff",
+    "8b2ab46344c1fff",
+    "8b2ab46344c2fff",
+    "8b2ab46344c3fff",
+    "8b2ab46344c4fff",
+    "8b2ab46344c5fff",
+    "8b2ab46344c6fff",
+    "8b2ab46344cafff",
+    "8b2ab46344cefff",
+    "8b2ab46344d1fff",
+    "8b2ab46344d8fff",
+    "8b2ab46344d9fff",
+    "8b2ab46344dafff",
+    "8b2ab46344dbfff",
+    "8b2ab46344dcfff",
+    "8b2ab46344ddfff",
+    "8b2ab46344defff",
+    "8b2ab4634602fff",
+    "8b2ab4634606fff",
+    "8b2ab4634610fff",
+    "8b2ab4634611fff",
+    "8b2ab4634612fff",
+    "8b2ab4634613fff",
+    "8b2ab4634614fff",
+    "8b2ab4634615fff",
+    "8b2ab4634616fff",
+    "8b2ab463461cfff",
+    "8b2ab463461efff",
+    "8b2ab4634630fff",
+    "8b2ab4634631fff",
+    "8b2ab4634632fff",
+    "8b2ab4634633fff",
+    "8b2ab4634634fff",
+    "8b2ab4634635fff",
+    "8b2ab4634636fff",
+    "8b2ab4634684fff",
+    "8b2ab4634685fff",
+    "8b2ab4634686fff",
+    "8b2ab4634694fff",
+    "8b2ab4634695fff",
+    "8b2ab46346a0fff",
+    "8b2ab46346a1fff",
+    "8b2ab46346a2fff",
+    "8b2ab46346a3fff",
+    "8b2ab46346a4fff",
+    "8b2ab46346a5fff",
+    "8b2ab46346a6fff",
+    "8b2ab46346a8fff",
+    "8b2ab46346aafff",
+    "8b2ab46346acfff",
+    "8b2ab46346adfff",
+    "8b2ab46346aefff",
+    "8b2ab46346b0fff",
+    "8b2ab46346b1fff",
+    "8b2ab46346b2fff",
+    "8b2ab46346b3fff",
+    "8b2ab46346b4fff",
+    "8b2ab46346b5fff",
+    "8b2ab4634718fff",
+    "8b2ab463471afff",
+    "8b2ab463471bfff",
+    "8b2ab463471efff",
+    "8b2ab4634780fff",
+    "8b2ab4634781fff",
+    "8b2ab4634782fff",
+    "8b2ab4634783fff",
+    "8b2ab4634785fff",
+    "8b2ab4634786fff",
+    "8b2ab4634788fff",
+    "8b2ab4634789fff",
+    "8b2ab463478afff",
+    "8b2ab463478bfff",
+    "8b2ab463478cfff",
+    "8b2ab463478dfff",
+    "8b2ab463478efff",
+    "8b2ab4634790fff",
+    "8b2ab4634791fff",
+    "8b2ab4634794fff",
+    "8b2ab4634795fff",
+    "8b2ab4634798fff",
+    "8b2ab4634799fff",
+    "8b2ab463479afff",
+    "8b2ab463479bfff",
+    "8b2ab463479cfff",
+    "8b2ab463479dfff",
+    "8b2ab463479efff",
+    "8b2ab46347a8fff",
+    "8b2ab46347a9fff",
+    "8b2ab46347aafff",
+    "8b2ab46347abfff",
+    "8b2ab46347adfff",
+    "8b2ab46347aefff",
+    "8b2ab46347b3fff",
+    "8b2ab4636a29fff",
+    "8b2ab4636a2dfff",
+    "8b2ab4636a40fff",
+    "8b2ab4636a41fff",
+    "8b2ab4636a42fff",
+    "8b2ab4636a43fff",
+    "8b2ab4636a44fff",
+    "8b2ab4636a45fff",
+    "8b2ab4636a46fff",
+    "8b2ab4636a48fff",
+    "8b2ab4636a4cfff",
+    "8b2ab4636a4dfff",
+    "8b2ab4636a4efff",
+    "8b2ab4636a62fff",
+    "8b2ab4636a63fff",
+    "8b2ab4636a66fff",
+    "8b2ab4636a6afff",
+    "8b2ab4636a6bfff",
+    "8b2ab4636a70fff",
+    "8b2ab4636a71fff",
+    "8b2ab4636a73fff",
+    "8b2ab4636a74fff",
+    "8b2ab4636a75fff",
+    "8b2ab4636a76fff",
+    "8b2ab4636b29fff",
+    "8b2ab4636b42fff",
+    "8b2ab4636b46fff",
+    "8b2ab4636b50fff",
+    "8b2ab4636b51fff",
+    "8b2ab4636b53fff",
+    "8b2ab4636b54fff",
+    "8b2ab4636b55fff",
+    "8b2ab4636b58fff",
+    "8b2ab4636b5afff",
+    "8b2ab4636b5bfff",
+    "8b2ab4636b5cfff",
+    "8b2ab4636b5efff",
+    "8b2ab4636b66fff",
+    "8b2ab4636b70fff",
+    "8b2ab4636b71fff",
+    "8b2ab4636b72fff",
+    "8b2ab4636b73fff",
+    "8b2ab4636b74fff",
+    "8b2ab4636b75fff",
+    "8b2ab4636b76fff"
+  ]
+}

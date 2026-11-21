@@ -34,15 +34,29 @@ struct PassthroughExtractor: StickerExtracting {
 
 final class StubVerifier: QuestVerifying, @unchecked Sendable {
     var results: [Result<VerificationResult, Error>]
-    private(set) var calls = 0
+    private(set) var requests: [VerifyQuestRequest] = []
+    var calls: Int { requests.count }
     init(_ results: [Result<VerificationResult, Error>]) { self.results = results }
     func verify(_ request: VerifyQuestRequest, quest: Quest, image: CGImage) async throws -> VerificationResult {
-        calls += 1
+        requests.append(request)
         return try results.removeFirst().get()
     }
 }
 
 final class StubAuth: AuthTokenProviding, @unchecked Sendable {
-    func accessToken() async throws -> String { "test-token" }
-    var currentUserID: UUID? { get async { UUID() } }
+    private(set) var refreshes = 0
+    func accessToken(forceRefresh: Bool) async throws -> String {
+        if forceRefresh { refreshes += 1 }
+        return "test-token-\(refreshes)"
+    }
 }
+
+/// Path to the API contract's example responses (repo root docs/mocks).
+func mockURL(_ name: String, file: String = #filePath) -> URL {
+    URL(fileURLWithPath: file)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("docs/mocks/\(name)")
+}
+
+func mockData(_ name: String) throws -> Data { try Data(contentsOf: mockURL(name)) }

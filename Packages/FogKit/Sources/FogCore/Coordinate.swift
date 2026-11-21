@@ -15,6 +15,12 @@ public struct Coordinate: Hashable, Codable, Sendable {
         self.init(latitude: c.latitude, longitude: c.longitude)
     }
 
+    // JSON uses { "lat": …, "lng": … } (docs/api.md §1).
+    private enum CodingKeys: String, CodingKey {
+        case latitude = "lat"
+        case longitude = "lng"
+    }
+
     public var clCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }

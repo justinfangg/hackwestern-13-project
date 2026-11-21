@@ -28,12 +28,19 @@ public struct JSONFileStore<Value: Codable>: Sendable {
     public func delete() { try? FileManager.default.removeItem(at: url) }
 }
 
-/// Shared JSON settings: snake_case keys and ISO-8601 dates, matching the Edge Functions.
+/// Shared JSON settings matching the Edge Functions (docs/api.md §1): snake_case keys, ISO-8601 UTC
+/// dates. Dates are sent WITH milliseconds, because the server dedupes pings on (user, ts).
+/// CodingKeys raw values must be camelCase (the strategies convert to/from snake_case).
 public enum JSONCoding {
     public static var encoder: JSONEncoder {
         let e = JSONEncoder()
         e.keyEncodingStrategy = .convertToSnakeCase
-        e.dateEncodingStrategy = .iso8601
+        e.dateEncodingStrategy = .custom { date, encoder in
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            var c = encoder.singleValueContainer()
+            try c.encode(f.string(from: date))
+        }
         return e
     }
 

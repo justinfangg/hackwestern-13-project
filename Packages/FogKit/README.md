@@ -51,17 +51,18 @@ With `auth: nil` or `backend: nil`, everything runs against `MockFogAPI`, which 
 | **Ayman** | Implement `ExplorationClearing` (`FogCore/TeamInterfaces.swift`) on `ExplorationStore` | FogKit calls `clearTiles(around:)` for every interpolated GPS point. You don't need to subscribe to location yourself. Return only *newly* cleared tiles (used for expedition counts and sync). `GridExplorer` is a working square-grid version to copy from or fall back to. |
 | | `services.quests.today?.target` | Quest marker position |
 | | `services.profile.routeSegments` | Path-tracing map (each segment is a separate line; don't join them) |
+| | `services.profile.remote?.tiles` after `refresh(includeTiles: true)` | Restore fog after a reinstall (D8) |
 | | `services.location.currentCoordinate` | User dot / recentering |
-| **Jonathan** | Implement `AuthTokenProviding` on `AuthService` | `accessToken()` = Supabase session JWT; `currentUserID` = Supabase user id |
-| | `services.questCapture` | Render `state` (`.locked`, `.ready`, `.verifying`, `.success(sticker)`, `.rejected(reason:attemptsRemaining:)`, `.outOfAttempts`, `.error`), `distanceToTarget`, `canCapture`; call `capture(_:)` and `retry()` |
+| **Jonathan** | Implement `AuthTokenProviding` on `AuthService` | `accessToken(forceRefresh:)` = the Supabase session JWT; when `forceRefresh` is true, refresh the session first (FogKit calls this once after a 401) |
+| | `services.questCapture` | Render `state` (`.noQuest`, `.locked`, `.ready`, `.verifying`, `.success(sticker)`, `.rejected(reason:attemptsLeft:)`, `.tooFar(distanceMeters:)`, `.alreadyCompleted`, `.outOfAttempts`, `.error`), `distanceToTarget`, `attemptsLeft`, `streak`, `canCapture`; call `capture(_:)` and `retry()` |
+| | `services.quests` | `today` (`title`, `hint`, `placeName`, `foundTodayCount`), `status` (`.active` / `.quietHours` / `.noneInRegion`), `availableAt` |
 | | `CameraController` + `CameraPreview` | `try await camera.start()`, show `CameraPreview(session: camera.session)`, then `await services.questCapture.capture(try await camera.capturePhoto())` |
 | | `services.expeditions` | `isActive`, `active` (live distance/tiles/startedAt), `start()`, `end()`. Show the recap card when `lastSummary` becomes non-nil; `dismissSummary()` after |
 | | `ShareImage.render(YourCardView(summary:))` | Returns a `SharePNG` for `ShareLink` at 1080×1920 |
-| | `services.profile` | `stats`, `stickers`, `missedQuestDates`, `weeklyActivity`, `expeditions`; call `await refresh()` |
+| | `services.profile` | `username`, `stats`, `stickers`, `missedDays`, `weeklyActivity`, `expeditions`; call `await refresh()`. Onboarding: `try await setUsername(_:)` (errors `invalid_username`, `username_taken`) |
 | | `LocationPermissions` | `requestWhenInUse()` in onboarding, `requestAlways()` when the first expedition starts |
 | | `JoystickView`, `DebugMenuView`, `.debugUnlockGesture(services.debug)` | Show the joystick over the map when `services.debug.isSimulatorEnabled`; show the debug menu as a sheet when `isMenuUnlocked` |
-| **Vishaal** | `FogNetworking/APIModels.swift` | My **provisional** request/response shapes for the four Edge Functions. Once `docs/api.md` is written, I'll update this file to match. Conventions: snake_case keys, ISO-8601 dates, **tile IDs as hex strings** (H3 indexes don't fit in a JS number) |
-| | `SupabaseStickerStorage` | Uploads to bucket `stickers` at `<user_id>/<quest_id>.png` and expects a public bucket + insert/update policy for the user's own folder |
+| **Backend** | `FogNetworking/APIModels.swift` | Matches `docs/api.md` v0.2; `ContractTests` check it against every file in `docs/mocks`. The server uploads stickers (D3), so the app only keeps a local copy |
 
 ## Layout
 

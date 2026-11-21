@@ -2,29 +2,39 @@ import Foundation
 import Observation
 import FogCore
 
-/// Offline-first upload queue for cleared tiles, GPS pings and expeditions (PRD F-3).
+/// Offline-first upload queue for cleared tiles, GPS pings and expeditions (PRD F-3, docs/api.md §2).
 ///
-/// Everything is appended locally first and persisted to disk, then sent to the `sync`
-/// Edge Function in batches every 30 s and when an expedition ends. Sync is upsert-only,
-/// so resending after a failure is safe. Batching keeps the number of Edge Function calls and database connections low.
+/// Everything is appended locally first and persisted to disk, then sent to `sync` in batches every
+/// 30 s and when an expedition ends. Sync is idempotent, so resending after a failure is safe.
+/// Rules from the contract:
+/// - at most 5000 tiles, 2000 pings and 50 expeditions per request, oldest first;
+/// - every batch with pings for an expedition also carries that expedition's current record
+///   (the running one comes from `activeExpedition`).
 @MainActor
 @Observable
 public final class SyncQueue {
     public struct Pending: Codable, Sendable {
         public var tiles: [TileClear] = []
         public var pings: [LocationPing] = []
-        public var expeditions: [ExpeditionRecord] = []
+        /// Ended expeditions not yet acknowledged, kept until their last ping has been sent.
+        public var expeditions: [UUID: ExpeditionRecord] = [:]
     }
 
     public private(set) var pending: Pending
     public private(set) var isSyncing = false
     public private(set) var lastSyncedAt: Date?
     public private(set) var lastError: String?
+    /// Total tiles the server has for this user, from the last successful sync.
+    public private(set) var serverTotalTiles: Int?
     public var pendingCount: Int { pending.tiles.count + pending.pings.count + pending.expeditions.count }
 
     public var interval: TimeInterval = 30
-    public var maxTilesPerBatch = 2_000
-    public var maxPingsPerBatch = 3_000
+    public var maxTilesPerBatch = SyncRequest.maxTiles
+    public var maxPingsPerBatch = SyncRequest.maxPings
+    public var maxExpeditionsPerBatch = SyncRequest.maxExpeditions
+
+    /// The running expedition's current record (`endedAt == nil`). Set by FogServices.
+    @ObservationIgnored public var activeExpedition: (() -> ExpeditionRecord?)?
 
     @ObservationIgnored private let api: FogAPI
     @ObservationIgnored private let store: JSONFileStore<Pending>?
@@ -39,7 +49,7 @@ public final class SyncQueue {
 
     public func enqueue(tiles: [TileID], at date: Date = Date()) {
         guard !tiles.isEmpty else { return }
-        pending.tiles += tiles.map { TileClear(tile: $0, clearedAt: date) }
+        pending.tiles += tiles.map { TileClear(h3: $0, clearedAt: date) }
         persist()
     }
 
@@ -48,8 +58,10 @@ public final class SyncQueue {
         persist()
     }
 
+    /// Queue an ended expedition's final record.
     public func enqueue(expedition: ExpeditionSummary) {
-        pending.expeditions.append(ExpeditionRecord(expedition))
+        let record = ExpeditionRecord(expedition)
+        pending.expeditions[record.id] = record
         persist()
     }
 
@@ -76,24 +88,45 @@ public final class SyncQueue {
         isSyncing = true
         defer { isSyncing = false }
 
-        while pendingCount > 0 {
+        while !pending.tiles.isEmpty || !pending.pings.isEmpty || !pending.expeditions.isEmpty {
             let tiles = Array(pending.tiles.prefix(maxTilesPerBatch))
             let pings = Array(pending.pings.prefix(maxPingsPerBatch))
-            let expeditions = pending.expeditions
+            let expeditions = expeditionRecords(for: pings)
+
+            let response: SyncResponse
             do {
-                _ = try await api.sync(SyncRequest(tiles: tiles, pings: pings, expeditions: expeditions))
+                response = try await api.sync(SyncRequest(expeditions: expeditions, pings: pings, tiles: tiles))
             } catch {
                 lastError = String(describing: error)
                 return // keep everything; retry next tick
             }
+
             // Items enqueued during the request were appended after these, so drop from the front.
             pending.tiles.removeFirst(tiles.count)
             pending.pings.removeFirst(pings.count)
-            pending.expeditions.removeFirst(expeditions.count)
+            let stillReferenced = Set(pending.pings.compactMap(\.expeditionID))
+            for record in expeditions where record.endedAt != nil && !stillReferenced.contains(record.id) {
+                pending.expeditions[record.id] = nil
+            }
             persist()
+            serverTotalTiles = response.totalTiles
             lastError = nil
             lastSyncedAt = Date()
         }
+    }
+
+    /// Records for every expedition the pings mention, plus queued ended expeditions, up to the limit.
+    private func expeditionRecords(for pings: [LocationPing]) -> [ExpeditionRecord] {
+        let active = activeExpedition?()
+        var result: [UUID: ExpeditionRecord] = [:]
+        for id in Set(pings.compactMap(\.expeditionID)) {
+            if let r = pending.expeditions[id] ?? (active?.id == id ? active : nil) { result[id] = r }
+        }
+        for (id, r) in pending.expeditions.sorted(by: { $0.value.startedAt < $1.value.startedAt })
+        where result.count < maxExpeditionsPerBatch && result[id] == nil {
+            result[id] = r
+        }
+        return result.values.sorted { $0.startedAt < $1.startedAt }
     }
 
     private func persist() { store?.save(pending) }

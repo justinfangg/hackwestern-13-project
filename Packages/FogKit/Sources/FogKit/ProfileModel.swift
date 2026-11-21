@@ -4,7 +4,7 @@ import FogCore
 import FogNetworking
 import FogExpedition
 
-/// Data for the Profile tab (PRD P-1 to P-5). Jonathan's Profile views read this;
+/// Data for the Profile tab (PRD P-1 to P-5, docs/api.md §5–6). Jonathan's Profile views read this;
 /// Ayman's path-tracing map reads `routeSegments`.
 /// Works offline: local expeditions and newly collected stickers show before the server responds.
 @MainActor
@@ -24,17 +24,19 @@ public final class ProfileModel {
         self.history = history
     }
 
-    public var username: String { remote?.username ?? "Explorer" }
+    /// nil until a username is set (onboarding calls `setUsername`).
+    public var username: String? { remote?.username }
 
     /// Newest first, de-duplicated by quest.
     public var stickers: [Sticker] {
         var seen = Set<UUID>()
-        return (localStickers + (remote?.stickers ?? []))
+        return (localStickers + (remote?.stickers.map(\.sticker) ?? []))
             .sorted { $0.collectedAt > $1.collectedAt }
             .filter { seen.insert($0.questID).inserted }
     }
 
-    public var missedQuestDates: [String] { remote?.missedQuestDates ?? [] }
+    /// Days with no completion, for greyed-out silhouettes (Q-13).
+    public var missedDays: [MissedDay] { remote?.missedDays ?? [] }
 
     /// Lifetime stats (P-3); falls back to local data before the first fetch.
     public var stats: ProfileStats {
@@ -44,19 +46,42 @@ public final class ProfileModel {
                             questsCompleted: stickers.count, currentStreak: 0)
     }
 
+    /// Last 8 weeks, oldest first (P-5).
     public var weeklyActivity: [WeeklyActivity] { remote?.weeklyActivity ?? [] }
-    public var expeditions: [ExpeditionSummary] { history.expeditions }
-    public var routeSegments: [[Coordinate]] { history.allSegments }
 
-    public func refresh() async {
+    /// Local expeditions plus ones only the server knows about (e.g. after a reinstall), newest first.
+    public var expeditions: [ExpeditionSummary] {
+        let local = history.expeditions
+        let localIDs = Set(local.map(\.id))
+        let routes = Dictionary((remote?.routes ?? []).map { ($0.expeditionId, $0.points) }, uniquingKeysWith: { a, _ in a })
+        let remoteOnly = (remote?.expeditions ?? []).filter { !localIDs.contains($0.id) }.map {
+            ExpeditionSummary(id: $0.id, startedAt: $0.startedAt, endedAt: $0.endedAt, distanceMeters: $0.distanceM,
+                              newTiles: $0.newTiles, segments: routes[$0.id].map { [$0] } ?? [])
+        }
+        return (local + remoteOnly).sorted { $0.startedAt > $1.startedAt }
+    }
+
+    /// Every walked route segment, for the path-tracing map (P-2). Don't join segments.
+    public var routeSegments: [[Coordinate]] { expeditions.flatMap(\.segments) }
+
+    public func refresh(includeTiles: Bool = false) async {
         isLoading = true
         defer { isLoading = false }
         do {
-            remote = try await api.profile()
+            remote = try await api.profile(includeTiles: includeTiles)
             lastError = nil
         } catch {
             lastError = String(describing: error)
         }
+    }
+
+    /// Set or change the username (onboarding). Throws `APIError` with code `invalid_username` or
+    /// `username_taken` (docs/api.md §6).
+    @discardableResult
+    public func setUsername(_ username: String) async throws -> ProfileIdentity {
+        let identity = try await api.setUsername(username)
+        remote?.username = identity.username
+        return identity
     }
 
     public func addLocalSticker(_ sticker: Sticker) {

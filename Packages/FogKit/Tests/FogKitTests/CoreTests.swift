@@ -36,20 +36,19 @@ import Testing
 }
 
 @Suite struct JSONContractTests {
-    @Test func usesSnakeCaseAndISODates() throws {
-        let req = VerifyQuestRequest(questId: UUID(), photoBase64: "abc", location: .westernCampus,
-                                     capturedAt: Date(timeIntervalSince1970: 0))
+    @Test func usesSnakeCaseAndMillisecondDates() throws {
+        let req = VerifyQuestRequest(questId: UUID(), location: .westernCampus, accuracyM: 5,
+                                     capturedAt: Date(timeIntervalSince1970: 0.25),
+                                     photoJpegBase64: "abc", stickerPngBase64: "def")
         let json = String(decoding: try JSONCoding.encoder.encode(req), as: UTF8.self)
         #expect(json.contains("\"quest_id\""))
-        #expect(json.contains("\"photo_base64\""))
-        #expect(json.contains("\"captured_at\":\"1970-01-01T00:00:00Z\""))
+        #expect(json.contains("\"photo_jpeg_base64\""))
+        #expect(json.contains("\"captured_at\":\"1970-01-01T00:00:00.250Z\""))
     }
 
-    @Test func decodesFractionalSecondDates() throws {
-        let json = #"{"verified":true,"confidence":0.9,"reason":"ok","attempts_remaining":4}"#
-        let r = try JSONCoding.decoder.decode(VerificationResult.self, from: Data(json.utf8))
-        #expect(r.attemptsRemaining == 4)
+    @Test func decodesWholeAndFractionalSecondDates() throws {
         struct D: Decodable { var at: Date }
+        #expect(try JSONCoding.decoder.decode(D.self, from: Data(#"{"at":"2026-11-21T12:00:00Z"}"#.utf8)).at.timeIntervalSince1970 > 0)
         let d = try JSONCoding.decoder.decode(D.self, from: Data(#"{"at":"2026-11-21T12:00:00.123Z"}"#.utf8))
         #expect(d.at.timeIntervalSince1970 > 0)
     }

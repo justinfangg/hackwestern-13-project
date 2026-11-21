@@ -120,7 +120,7 @@ public struct ProfileResponse: Codable, Sendable {
     public var stickers: [Sticker]
     /// Quest dates the user missed, for greyed-out silhouettes (PRD Q-13).
     public var missedQuestDates: [String]
-    /// Last ~8 weeks, oldest first (PRD P-5, from Tiger Data continuous aggregates).
+    /// Last ~8 weeks, oldest first (PRD P-5, from the `daily_activity` view).
     public var weeklyActivity: [WeeklyActivity]
 
     public init(username: String, stats: ProfileStats, stickers: [Sticker],

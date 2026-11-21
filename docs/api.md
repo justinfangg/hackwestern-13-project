@@ -2,7 +2,7 @@
 
 Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.1 draft (2026-11-21)**
 
-Four Supabase Edge Functions in front of Tiger Data. The app talks only to these functions. It never talks to Tiger Data or Supabase Storage directly.
+Four Supabase Edge Functions in front of the Supabase Postgres database. The app talks only to these functions. It never reads or writes database tables or Supabase Storage directly (row-level security blocks it).
 Mock responses live in [`docs/mocks/`](mocks/), one file per response. Build against the mocks until the functions are live.
 Items marked **Proposal, needs team OK** are listed again under [Open decisions](#open-decisions).
 
@@ -208,7 +208,7 @@ Response `200` ([mock](mocks/profile.200.json)), abridged:
 | `stats.current_streak` | Run of consecutive Toronto days with a completion, ending today **or yesterday** (today doesn't break the streak until midnight passes) |
 | `stickers` | All completions, newest first. `place` = the quest target |
 | `missed_days` | Days from the signup day to yesterday with no completion, newest first, at most 30. `category` = that day's quest in your home region (the region of your latest completion), or `null` (Proposal, needs team OK: D9). Shown as greyed silhouettes |
-| `weekly_activity` | The last 8 weeks, oldest first, Monday-start Toronto weeks, weeks with no activity included as zeros. Served from Timescale continuous aggregates |
+| `weekly_activity` | The last 8 weeks, oldest first, Monday-start Toronto weeks, weeks with no activity included as zeros. Served from the `daily_activity` view |
 | `expeditions` | The last 50 ended expeditions, newest first |
 | `routes` | One simplified polyline (~5 m tolerance) per ended expedition, for path tracing |
 | `tiles` | **Only with `?include=tiles`**: every cleared res 11 cell id ([mock](mocks/profile.200-include-tiles.json)). Call it once after a fresh install or sign-in to restore the fog, then rely on local state (Proposal, needs team OK: D8) |
@@ -219,7 +219,7 @@ Error example: [`profile.401.json`](mocks/profile.401.json).
 
 ## 6. `POST profile`
 
-Sets or changes your username. Call it in onboarding, right after anonymous sign-in. This is the only call that writes `profiles` (the app can't reach Tiger Data directly).
+Sets or changes your username. Call it in onboarding, right after anonymous sign-in. This is the only call that writes `profiles` (the app can't write database tables directly).
 
 Request ([mock](mocks/profile-post.request.json)): `{ "username": "vishaal" }`
 Response `200` ([mock](mocks/profile-post.200.json)): `{ "user_id": "3f6c2a9e-…", "username": "vishaal", "created_at": "2026-11-14T18:55:02Z" }`

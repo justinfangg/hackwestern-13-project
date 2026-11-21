@@ -19,8 +19,9 @@ Only work that's been pushed to GitHub is counted.
 | FogKit package: location, simulator, expeditions, quest capture, networking (§13 Justin checklist) | Justin | ✅ mostly; API alignment pending | `main`: `Packages/FogKit/` |
 | Temporary dev test screen (map, joystick, quest, expedition, recap/share) | Justin | ✅ | `main`: `FogOfWar/FogOfWar/Dev/` |
 | API contract + mock responses | Vishaal | ✅ (open decisions still to settle) | `main`: `docs/api.md`, `docs/mocks/` |
-| Database schema + schema tests (17/17 pass on Supabase Postgres) | Vishaal, moved to Supabase by Justin | ✅ locally; not yet pushed to a cloud project | `main`: `supabase/migrations/`, `scripts/db/`, `docs/backend.md` |
-| Edge Functions, Supabase project setup, prompt tuning, quest + demo seeding | Justin (taken over from Vishaal) | ⬜ | |
+| Database schema + schema tests (17/17 pass on Supabase Postgres) | Vishaal, moved to Supabase by Justin | ✅ pushed to the cloud project | `main`: `supabase/migrations/`, `scripts/db/`, `docs/backend.md` |
+| Supabase project `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1): anonymous sign-in, schema, `stickers` + `quest-photos` buckets, `GEMINI_API_KEY` secret | Justin | ✅ | `supabase/config.toml` |
+| Edge Functions, prompt tuning, quest + demo seeding | Justin (taken over from Vishaal) | ⬜ | |
 | Pitch | Vishaal | ⬜ | |
 | Fog renderer + H3 `ExplorationStore` | Ayman | ⬜ (branch `feature/ayman-map-fog` exists, no commits yet) | |
 | Design system, screens, `AuthService` | Jonathan | ⬜ nothing pushed yet | |
@@ -36,7 +37,7 @@ Only work that's been pushed to GitHub is counted.
 
 ### Justin: what's next (in order)
 
-1. **Create the Supabase project and Gemini key** (Vishaal hasn't created any services). Keys go in `.env` only, never committed.
+1. ~~Create the Supabase project and Gemini key~~ ✅ Done; keys are in `.env` (never committed). Gemini works but is intermittently slow/overloaded (503s, 38–51 s responses): `verify-quest` must use low thinking, retries and a ~10 s cap.
 2. **Settle the open decisions in `docs/api.md`** (D1–D12; Justin now decides). Recommended: accept all as proposed. **Remove the quest reveal** from the contract and mocks (`reveal_radius_m` in `quest-today`, the `reveal` object in `verify-quest`).
 3. **Align `FogNetworking` with `docs/api.md`.** My provisional shapes in `APIModels.swift` differ in several places:
    - coordinates are `{ "lat", "lng" }`, not `{ "latitude", "longitude" }`
@@ -48,7 +49,7 @@ Only work that's been pushed to GitHub is counted.
    - use the files in `docs/mocks/` as test fixtures, and make `MockFogAPI` return them
 4. **Write the Edge Functions** in `supabase/functions/` (TypeScript; install the CLI with `brew install supabase/tap/supabase`), test locally against `supabase start`: `quest-today` → `sync` → `profile` (GET + POST) → `verify-quest`.
 5. **Write and tune the `verify-quest` prompt** (Gemini vision) with a folder of test photos: real objects, photos of screens, wrong objects.
-6. **Cloud setup:** link the Supabase project and push the migrations (`npm run db:push`), create the public `stickers` + private `quest-photos` buckets, set the `GEMINI_API_KEY` secret, deploy the functions, put the project URL + anon key in `FogOfWarApp.swift`.
+6. **Cloud setup:** ~~link, push migrations, buckets, Gemini secret~~ ✅ done. Remaining: deploy the functions, put the project URL + publishable key in `FogOfWarApp.swift`.
 7. **Seed data:** hand-pick campus quest targets into `daily_quests`; seed the demo account (past expeditions, stickers, a streak).
 8. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
 9. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.
@@ -510,7 +511,7 @@ Vishaal wrote the API contract and the database schema, then handed all remainin
 - [x] API contract in `docs/api.md` with mocks *(Vishaal)*. Open decisions D1–D12 still to settle; remove the quest reveal
 - [x] Database schema and schema tests *(Vishaal, written for Tiger Data)*
 - [x] Move the schema to Supabase Postgres: plain tables + views, row-level security, tests on Supabase's Postgres image *(Justin)*
-- [ ] Supabase project: anonymous sign-in, push migrations, public `stickers` + private `quest-photos` buckets, `GEMINI_API_KEY` secret
+- [x] Supabase project: anonymous sign-in, push migrations, public `stickers` + private `quest-photos` buckets, `GEMINI_API_KEY` secret
 - [ ] Edge Functions `sync`, `quest-today`, `profile` (GET + POST), each taking `user_id` from the verified JWT (§10.1)
 - [ ] `verify-quest` Edge Function: checks, geofence, attempt limit, Gemini vision call, Storage upload on success (Q-7, §10.5)
 - [ ] Prompt tuning with a folder of test photos (real objects, photos of screens, wrong objects)

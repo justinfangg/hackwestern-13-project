@@ -48,7 +48,7 @@ create table expeditions (
   distance_m  double precision not null default 0,
   new_tiles   integer          not null default 0,
   -- Built by the server from location_pings when ended_at arrives. Used for routes in GET profile.
-  path        geography(LineString, 4326),
+  path        extensions.geography(LineString, 4326),
   constraint expeditions_time_order check (ended_at is null or ended_at >= started_at),
   constraint expeditions_nonnegative check (distance_m >= 0 and new_tiles >= 0)
 );
@@ -66,7 +66,7 @@ create table daily_quests (
   category    text   not null
     constraint daily_quests_category check (category in
       ('bench', 'lamppost', 'tree', 'fire_hydrant', 'mural', 'statue', 'mailbox')),
-  target      geography(Point, 4326) not null,
+  target      extensions.geography(Point, 4326) not null,
   hint        text   not null,
   -- Added for the API (quest card + sticker detail): short label like 'University College Hill'.
   place_name  text,

@@ -9,7 +9,7 @@ create table location_pings (
   -- null for fixes outside an expedition (they count toward distance but aren't drawn as routes).
   expedition_id  uuid        references expeditions (id) on delete set null,
   ts             timestamptz not null,
-  location       geography(Point, 4326) not null,
+  location       extensions.geography(Point, 4326) not null,
   accuracy_m     real,
   speed_mps      real,
   -- Distance and time since this user's previous accepted fix, computed by `sync` (including the

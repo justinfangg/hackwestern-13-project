@@ -33,7 +33,9 @@ struct FogOfWarApp: App {
 }
 ```
 
-With `auth: nil` or `backend: nil`, everything runs against `MockFogAPI`, which returns a sample quest, accepts every photo, and fakes sync. You can build and demo the whole flow before the backend exists.
+The app currently passes `SupabaseAnonymousAuth(config: SupabaseConfig.backend)` and `SupabaseConfig.backend` (in `FogOfWar/FogOfWar/Config/SupabaseConfig.swift`), so it talks to the real project.
+
+With `auth: nil` or `backend: nil` (or Debug menu → Mock backend, applied on relaunch), everything runs against `MockFogAPI`, which returns a sample quest, accepts every photo, and fakes sync. You can build and demo the whole flow before the backend exists.
 
 ### Info.plist keys (app target)
 
@@ -53,7 +55,8 @@ With `auth: nil` or `backend: nil`, everything runs against `MockFogAPI`, which 
 | | `services.profile.routeSegments` | Path-tracing map (each segment is a separate line; don't join them) |
 | | `services.profile.remote?.tiles` after `refresh(includeTiles: true)` | Restore fog after a reinstall (D8) |
 | | `services.location.currentCoordinate` | User dot / recentering |
-| **Jonathan** | Implement `AuthTokenProviding` on `AuthService` | `accessToken(forceRefresh:)` = the Supabase session JWT; when `forceRefresh` is true, refresh the session first (FogKit calls this once after a 401) |
+| **Jonathan** | `SupabaseAnonymousAuth` (in FogKit) already does anonymous sign-in, Keychain session and token refresh, and the app uses it today. Wrap or replace it in `AuthService` if you need more | Its `userID` is the Supabase user id. Onboarding only needs to call `services.profile.setUsername(_:)` |
+| | Or implement `AuthTokenProviding` yourself on `AuthService` | `accessToken(forceRefresh:)` = the Supabase session JWT; when `forceRefresh` is true, refresh the session first (FogKit calls this once after a 401) |
 | | `services.questCapture` | Render `state` (`.noQuest`, `.locked`, `.ready`, `.verifying`, `.success(sticker)`, `.rejected(reason:attemptsLeft:)`, `.tooFar(distanceMeters:)`, `.alreadyCompleted`, `.outOfAttempts`, `.error`), `distanceToTarget`, `attemptsLeft`, `streak`, `canCapture`; call `capture(_:)` and `retry()` |
 | | `services.quests` | `today` (`title`, `hint`, `placeName`, `foundTodayCount`), `status` (`.active` / `.quietHours` / `.noneInRegion`), `availableAt` |
 | | `CameraController` + `CameraPreview` | `try await camera.start()`, show `CameraPreview(session: camera.session)`, then `await services.questCapture.capture(try await camera.capturePhoto())` |

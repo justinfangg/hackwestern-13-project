@@ -27,7 +27,7 @@ Only work that's been pushed to GitHub is counted.
 | Fog renderer + H3 `ExplorationStore` | Ayman | ⬜ (branch `feature/ayman-map-fog` exists, no commits yet) | |
 | Design system, screens, `AuthService` | Jonathan | ⬜ nothing pushed yet | |
 
-**What works today:** run `FogOfWar/FogOfWar.xcodeproj` on the iPhone Simulator. The joystick moves you, tiles clear (shown as blue dots until Ayman's fog lands), expeditions track distance, tiles and time, the quest unlocks within 40 m, a photo "verifies" against the mock backend and becomes a sticker, and the recap card can be shared. Everything uses `MockFogAPI` and `GridExplorer` stand-ins.
+**What works today:** run `FogOfWar/FogOfWar.xcodeproj` on the iPhone Simulator against the **live Supabase backend**: anonymous sign-in, today's real campus quest from OpenStreetMap, Ayman's H3 fog clearing with the joystick, expeditions, and sync of tiles/pings/expeditions to the cloud. Photo verification reaches the server but Gemini is currently unreliable (`verifier_unavailable`).
 
 **Changed since the original plan:**
 - Vishaal hands over all remaining technical work to Justin and focuses on the pitch full-time (§13, §15).
@@ -43,7 +43,7 @@ Only work that's been pushed to GitHub is counted.
 3. ~~Align `FogNetworking` with `docs/api.md`~~ ✅ Done: all request/response types match v0.2 and are tested against every file in `docs/mocks`; error codes map to quest states; 401 → refresh token and retry once; `StickerStorage` upload removed (D3); `POST profile` added. 57 FogKit tests pass.
 4. ~~Write the Edge Functions~~ ✅ Done and deployed: `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST). Local smoke test 24/24 (`npm run functions:smoke`). **Blocked on Gemini reliability:** verification currently returns `verifier_unavailable`; switch model via the `GEMINI_MODEL` secret once one responds.
 5. **Write and tune the `verify-quest` prompt** (Gemini vision) with a folder of test photos: real objects, photos of screens, wrong objects.
-6. **Cloud setup:** ~~link, push migrations, buckets, Gemini secret~~ ✅ done. Remaining: deploy the functions, put the project URL + publishable key in `FogOfWarApp.swift`.
+6. ~~Cloud setup~~ ✅ Done: migrations, buckets, Gemini secret, functions deployed; the app talks to the live project (`Config/SupabaseConfig.swift`) with FogKit's `SupabaseAnonymousAuth` (anonymous sign-in, Keychain session, token refresh). Verified on a clean Simulator install: real quest loads, tiles and pings sync.
 7. **Seed data:** ✅ quests seeded from OpenStreetMap for 2026-11-21 → 27 (`npm run db:seed-quests`). Remaining: seed the demo account (past expeditions, stickers, a streak) and a hand-placed stage-demo quest (D11).
 8. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
 9. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.

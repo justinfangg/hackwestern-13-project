@@ -216,3 +216,76 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         #expect(queue.pendingCount == 0)
     }
 }
+
+// MARK: - Anonymous sign-in against a fake Supabase Auth
+
+/// Separate fake network so these tests don't share state with LiveFogAPITests (suites run in parallel).
+final class AuthStubURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var handler: ((URLRequest) -> (Int, Data))?
+    nonisolated(unsafe) static var seen: [URLRequest] = []
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.seen.append(request)
+        let (status, data) = Self.handler?(request) ?? (500, Data())
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status,
+                                                               httpVersion: nil, headerFields: nil)!,
+                            cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+@Suite(.serialized) struct AnonymousAuthTests {
+    static func tokenJSON(_ n: Int, user: UUID) -> Data {
+        Data(#"{"access_token":"access-\#(n)","token_type":"bearer","expires_in":3600,"refresh_token":"refresh-\#(n)","user":{"id":"\#(user.uuidString)"}}"#.utf8)
+    }
+
+    func makeAuth(store: InMemorySessionStore = InMemorySessionStore()) -> SupabaseAnonymousAuth {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [AuthStubURLProtocol.self]
+        AuthStubURLProtocol.seen = []
+        return SupabaseAnonymousAuth(config: BackendConfig(projectURL: URL(string: "https://ref.supabase.co")!, anonKey: "pk"),
+                                     store: store, urlSession: URLSession(configuration: config))
+    }
+
+    @Test func signsUpOnceThenUsesCachedToken() async throws {
+        let user = UUID()
+        AuthStubURLProtocol.handler = { _ in (200, Self.tokenJSON(1, user: user)) }
+        let store = InMemorySessionStore()
+        let auth = makeAuth(store: store)
+        #expect(try await auth.accessToken() == "access-1")
+        #expect(try await auth.accessToken() == "access-1")
+        #expect(AuthStubURLProtocol.seen.count == 1)
+        #expect(AuthStubURLProtocol.seen[0].url?.path == "/auth/v1/signup")
+        #expect(AuthStubURLProtocol.seen[0].value(forHTTPHeaderField: "apikey") == "pk")
+        #expect(await auth.userID == user && store.load()?.refreshToken == "refresh-1")
+    }
+
+    @Test func forceRefreshUsesRefreshToken() async throws {
+        let user = UUID()
+        let existing = SupabaseAnonymousAuth.Session(accessToken: "old", refreshToken: "refresh-0",
+                                                     expiresAt: Date().addingTimeInterval(3600), userID: user)
+        AuthStubURLProtocol.handler = { _ in (200, Self.tokenJSON(2, user: user)) }
+        let auth = makeAuth(store: InMemorySessionStore(existing))
+        #expect(try await auth.accessToken() == "old")                    // restored from the store
+        #expect(try await auth.accessToken(forceRefresh: true) == "access-2")
+        let req = try #require(AuthStubURLProtocol.seen.first)
+        #expect(req.url?.path == "/auth/v1/token" && req.url?.query == "grant_type=refresh_token")
+    }
+
+    @Test func rejectedRefreshSignsUpAgain() async throws {
+        let user = UUID()
+        let expired = SupabaseAnonymousAuth.Session(accessToken: "old", refreshToken: "dead",
+                                                    expiresAt: Date().addingTimeInterval(-10), userID: UUID())
+        AuthStubURLProtocol.handler = { req in
+            req.url?.path == "/auth/v1/token" ? (400, Data(#"{"error":"invalid_grant"}"#.utf8)) : (200, Self.tokenJSON(3, user: user))
+        }
+        let auth = makeAuth(store: InMemorySessionStore(expired))
+        #expect(try await auth.accessToken() == "access-3")
+        #expect(AuthStubURLProtocol.seen.map { $0.url!.path } == ["/auth/v1/token", "/auth/v1/signup"])
+        #expect(await auth.userID == user)
+    }
+}

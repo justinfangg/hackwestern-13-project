@@ -215,7 +215,12 @@ struct DevHarnessView: View {
                 Spacer()
                 Button("End") { exp.end() }.buttonStyle(.bordered).tint(.red)
             } else {
-                Text("Sync: \(services.sync.pendingCount) pending").font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(services.usingMockBackend ? "Mock" : "Live") backend · sync: \(services.sync.pendingCount) pending")
+                    if let total = services.sync.serverTotalTiles { Text("Server has \(total) tiles") }
+                    if let error = services.sync.lastError { Text("Sync error: \(error)").lineLimit(2) }
+                }
+                .font(.caption)
                 Spacer()
                 Button("Start expedition") { exp.start() }.buttonStyle(.borderedProminent)
             }

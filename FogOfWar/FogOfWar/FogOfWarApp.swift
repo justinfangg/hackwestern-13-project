@@ -15,8 +15,9 @@ struct FogOfWarApp: App {
     /// Offline-first H3 exploration store. Same instance is handed to FogKit.
     @State private var explorationStore: ExplorationStore
 
-    /// Temporary wiring until Jonathan's AuthService + Supabase backend land:
-    /// auth/backend stay nil so the app runs against `MockFogAPI`.
+    /// FogKit services talking to the real Supabase backend (SupabaseConfig).
+    /// Sign-in is FogKit's minimal anonymous auth until Jonathan's AuthService lands.
+    /// Debug menu → "Mock backend" switches to the offline fake (applies on relaunch).
     @State private var services: FogServices
 
     init() {
@@ -32,8 +33,8 @@ struct FogOfWarApp: App {
         _explorationStore = State(initialValue: store)
         _services = State(initialValue: FogServices(
             explorer: store,
-            auth: nil,
-            backend: nil
+            auth: SupabaseAnonymousAuth(config: SupabaseConfig.backend),
+            backend: SupabaseConfig.backend
         ))
     }
 

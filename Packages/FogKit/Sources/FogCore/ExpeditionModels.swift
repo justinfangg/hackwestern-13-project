@@ -35,7 +35,7 @@ public struct ExpeditionSummary: Identifiable, Hashable, Codable, Sendable {
     }()
 }
 
-/// A GPS fix as stored in the Tiger Data `location_pings` hypertable.
+/// A GPS fix as stored in the `location_pings` table.
 public struct LocationPing: Hashable, Codable, Sendable {
     public var expeditionID: UUID?
     public var timestamp: Date

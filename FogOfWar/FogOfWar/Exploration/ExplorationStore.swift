@@ -9,6 +9,15 @@ import SwiftData
 ///
 /// The store is main-actor isolated so SwiftData writes, Observation updates,
 /// and renderer notifications are delivered in a predictable order.
+///
+/// ## Vision radius vs effective clear footprint
+/// `visionRadiusMeters` (30 m) is the geometric circle passed to
+/// `TileMath.cells(intersecting:radiusMeters:)`. That API clears every H3
+/// resolution-11 cell whose hexagon **intersects** the circle, not only cells
+/// whose centres lie inside it. At res 11 (~25 m edge, ~50 m across) a cell that
+/// merely brushes the circle can extend ~25 m beyond it, so the **effective
+/// cleared footprint is roughly 55 m** from the fix. This PR documents that
+/// behaviour; the intersection algorithm itself is unchanged.
 @MainActor
 @Observable
 public final class ExplorationStore: ExplorationClearing {
@@ -24,10 +33,7 @@ public final class ExplorationStore: ExplorationClearing {
     private let modelContext: ModelContext
     private let tileMath: TileMath
 
-    public init(
-        modelContext: ModelContext,
-        tileMath: TileMath = TileMath()
-    ) {
+    public init(modelContext: ModelContext, tileMath: TileMath) {
         self.modelContext = modelContext
         self.tileMath = tileMath
         self.clearedCells = []
@@ -37,11 +43,16 @@ public final class ExplorationStore: ExplorationClearing {
         restorePersistedCells()
     }
 
-    public convenience init(
-        modelContainer: ModelContainer,
-        tileMath: TileMath = TileMath()
-    ) {
+    public convenience init(modelContext: ModelContext) {
+        self.init(modelContext: modelContext, tileMath: TileMath())
+    }
+
+    public convenience init(modelContainer: ModelContainer, tileMath: TileMath) {
         self.init(modelContext: modelContainer.mainContext, tileMath: tileMath)
+    }
+
+    public convenience init(modelContainer: ModelContainer) {
+        self.init(modelContext: modelContainer.mainContext, tileMath: TileMath())
     }
 
     public var changePublisher: AnyPublisher<ExplorationChange, Never> {

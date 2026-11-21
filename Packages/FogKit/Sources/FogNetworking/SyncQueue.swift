@@ -6,7 +6,7 @@ import FogCore
 ///
 /// Everything is appended locally first and persisted to disk, then sent to the `sync`
 /// Edge Function in batches every 30 s and when an expedition ends. Sync is upsert-only,
-/// so resending after a failure is safe. Batching keeps Tiger Data connection count low (PRD §14).
+/// so resending after a failure is safe. Batching keeps the number of Edge Function calls and database connections low.
 @MainActor
 @Observable
 public final class SyncQueue {

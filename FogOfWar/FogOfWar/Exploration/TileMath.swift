@@ -5,7 +5,7 @@ import SwiftyH3
 
 /// Geometry prepared once in map-point space so renderers do not need to know
 /// anything about the H3 package or repeat geographic projection work.
-struct CellGeometry {
+nonisolated struct CellGeometry: Sendable {
     let id: H3CellID
     let centerCoordinate: CLLocationCoordinate2D
     let centerMapPoint: MKMapPoint
@@ -13,11 +13,10 @@ struct CellGeometry {
     let mapRect: MKMapRect
 }
 
-enum TileMathError: Error, Equatable {
+nonisolated enum TileMathError: Error, Equatable, Sendable {
     case invalidCoordinate
     case invalidCell(H3CellID)
     case invalidRadius(CLLocationDistance)
-    case invalidResolution(Int)
     case emptyBoundary(H3CellID)
     case radiusTooLarge(CLLocationDistance)
 }
@@ -26,12 +25,12 @@ enum TileMathError: Error, Equatable {
 ///
 /// `SwiftyH3` is intentionally imported only by this file. Callers exchange
 /// `H3CellID`, Core Location coordinates, and MapKit geometry instead.
-public struct TileMath {
-    static let explorationResolution = 11
-
+///
+/// Marked `nonisolated` so it can be constructed from default arguments and used
+/// from MapKit overlay draw threads under the app's default MainActor isolation.
+nonisolated public struct TileMath: Sendable {
     private static let h3Resolution: H3Cell.Resolution = .res11
     private static let maximumGridDiskDistance: Int32 = 128
-    private static let approximateMinimumCellAreaSquareMeters = 1_500.0
     private static let approximateCellDiameterMeters = 50.0
 
     public init() {}
@@ -45,35 +44,20 @@ public struct TileMath {
         return H3CellID(rawValue: cell.id)
     }
 
-    public func boundary(for id: H3CellID) throws -> [MKMapPoint] {
-        let cell = try h3Cell(for: id)
-        return try cell.boundary.map { MKMapPoint($0.coordinates) }
-    }
-
-    public func center(for id: H3CellID) throws -> CLLocationCoordinate2D {
-        let cell = try h3Cell(for: id)
-        return try cell.center.coordinates
-    }
-
     func geometry(for id: H3CellID) throws -> CellGeometry {
         try geometry(for: h3Cell(for: id))
-    }
-
-    public func parent(for id: H3CellID, resolution: Int) throws -> H3CellID {
-        guard let rawResolution = Int32(exactly: resolution),
-              let parentResolution = H3Cell.Resolution(rawValue: rawResolution)
-        else {
-            throw TileMathError.invalidResolution(resolution)
-        }
-
-        let parent = try h3Cell(for: id).parent(at: parentResolution)
-        return H3CellID(rawValue: parent.id)
     }
 
     /// Returns every resolution-11 cell whose hexagon intersects the requested
     /// radius. `gridDisk` supplies a conservative candidate set, after which a
     /// local tangent-plane circle-versus-polygon test removes cells that do not
     /// actually touch the circle.
+    ///
+    /// Because whole hexagons are cleared (not only centres inside the circle),
+    /// the farthest cleared point can sit roughly one cell radius beyond
+    /// `radiusMeters` — about **55 m** for the app's 30 m vision radius. See
+    /// `ExplorationStore` for the product-facing note; this method's geometry
+    /// is intentionally unchanged.
     public func cells(
         intersecting coordinate: CLLocationCoordinate2D,
         radiusMeters: CLLocationDistance
@@ -118,43 +102,6 @@ public struct TileMath {
 
             return candidateGeometry.id
         })
-    }
-
-    /// Produces render-ready resolution-11 cells intersecting a visible map
-    /// rectangle. At broad zoom levels this deliberately returns an empty array;
-    /// callers should keep the base fog fill but omit tiny hex outlines.
-    func visibleCells(in mapRect: MKMapRect, maxCount: Int) throws -> [CellGeometry] {
-        guard maxCount > 0,
-              let visibleRect = clippedToWorld(mapRect),
-              estimatedCellCount(in: visibleRect) <= Double(maxCount)
-        else {
-            return []
-        }
-
-        let polygon = H3Polygon(rectangleCoordinates(for: visibleRect).map(H3LatLng.init))
-        let cells = try polygon.cellsExperimental(
-            at: Self.h3Resolution,
-            containmentType: .overlapping
-        )
-
-        guard cells.count <= maxCount else {
-            return []
-        }
-
-        var result: [CellGeometry] = []
-        result.reserveCapacity(cells.count)
-
-        for cell in cells {
-            let cellGeometry = try geometry(for: cell)
-            if mapRectsIntersect(cellGeometry.mapRect, visibleRect) {
-                result.append(cellGeometry)
-                if result.count > maxCount {
-                    return []
-                }
-            }
-        }
-
-        return result.sorted { $0.id.rawValue < $1.id.rawValue }
     }
 
     private func h3Cell(for id: H3CellID) throws -> H3Cell {
@@ -332,64 +279,9 @@ public struct TileMath {
         )
     }
 
-    private func clippedToWorld(_ mapRect: MKMapRect) -> MKMapRect? {
-        guard mapRect.origin.x.isFinite,
-              mapRect.origin.y.isFinite,
-              mapRect.size.width.isFinite,
-              mapRect.size.height.isFinite,
-              mapRect.size.width > 0,
-              mapRect.size.height > 0
-        else {
-            return nil
-        }
-
-        let world = MKMapRect.world
-        let minimumX = max(mapRect.minX, world.minX)
-        let maximumX = min(mapRect.maxX, world.maxX)
-        let minimumY = max(mapRect.minY, world.minY)
-        let maximumY = min(mapRect.maxY, world.maxY)
-
-        guard maximumX > minimumX, maximumY > minimumY else { return nil }
-
-        return MKMapRect(
-            x: minimumX,
-            y: minimumY,
-            width: maximumX - minimumX,
-            height: maximumY - minimumY
-        )
-    }
-
-    private func rectangleCoordinates(for mapRect: MKMapRect) -> [CLLocationCoordinate2D] {
-        // Counter-clockwise in longitude/latitude space, as expected by H3.
-        [
-            MKMapPoint(x: mapRect.minX, y: mapRect.minY).coordinate,
-            MKMapPoint(x: mapRect.minX, y: mapRect.maxY).coordinate,
-            MKMapPoint(x: mapRect.maxX, y: mapRect.maxY).coordinate,
-            MKMapPoint(x: mapRect.maxX, y: mapRect.minY).coordinate,
-        ]
-    }
-
-    private func estimatedCellCount(in mapRect: MKMapRect) -> Double {
-        let center = MKMapPoint(x: mapRect.midX, y: mapRect.midY).coordinate
-        let metersPerMapPoint = MKMetersPerMapPointAtLatitude(center.latitude)
-        let widthMeters = mapRect.size.width * metersPerMapPoint
-        let heightMeters = mapRect.size.height * metersPerMapPoint
-        let areaEstimate = (widthMeters * heightMeters)
-            / Self.approximateMinimumCellAreaSquareMeters
-        let boundaryEstimate = (2 * (widthMeters + heightMeters))
-            / Self.approximateCellDiameterMeters
-        return ceil(areaEstimate + boundaryEstimate + 8)
-    }
-
-    private func mapRectsIntersect(_ first: MKMapRect, _ second: MKMapRect) -> Bool {
-        first.minX <= second.maxX
-            && first.maxX >= second.minX
-            && first.minY <= second.maxY
-            && first.maxY >= second.minY
-    }
 }
 
-private struct LocalPoint {
+nonisolated private struct LocalPoint: Sendable {
     let x: Double
     let y: Double
 

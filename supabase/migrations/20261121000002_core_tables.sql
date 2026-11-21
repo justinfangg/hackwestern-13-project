@@ -1,17 +1,19 @@
--- 002: regular (non-time-series) tables. PRD §10.6, plus the fixes noted inline.
+-- Core tables. PRD §10.6, plus the fixes noted inline. Originally written by Vishaal for Tiger Data;
+-- moved to Supabase Postgres (same schema, no TimescaleDB).
 --
 -- H3 cells are stored as bigint. H3 ids are unsigned 64-bit, but the top (reserved) bit is always 0,
 -- so every valid cell fits in a signed bigint as a positive number. JSON carries them as lowercase hex
 -- strings (docs/api.md); convert at the Edge Function boundary.
 --
--- Access control: there is no row-level security. Edge Functions are the only database client and
--- filter every query by the user_id from the verified JWT (PRD §10.1).
+-- Access control: Supabase exposes the public schema through its auto-generated REST API, so every
+-- table has row-level security ON with NO policies (see the end of 20261121000004). The app can't
+-- read or write tables directly; Edge Functions are the only client and filter every query by the
+-- user_id from the verified JWT (PRD §10.1).
 
 -- ---------------------------------------------------------------- profiles
 create table profiles (
-  -- = Supabase Auth user id. No foreign key to auth.users: that table lives in Supabase's database,
-  -- not in Tiger Data. The row is created on the first call to any Edge Function.
-  id          uuid primary key,
+  -- = Supabase Auth user id. The row is created on the first call to any Edge Function.
+  id          uuid primary key references auth.users (id) on delete cascade,
   -- null until POST profile sets it (docs/api.md §6).
   username    text,
   avatar_url  text,
@@ -24,7 +26,7 @@ create unique index profiles_username_lower_key on profiles (lower(username));
 
 -- ---------------------------------------------------------------- cleared_tiles
 -- One row per (user, res 11 cell), forever. Upsert-only: tiles never un-clear, so sync has no conflicts.
--- Not a hypertable: it's keyed by cell, not by time, and rows are deduplicated on (user_id, h3).
+-- Keyed by cell, not by time; rows are deduplicated on (user_id, h3).
 create table cleared_tiles (
   user_id           uuid        not null references profiles (id) on delete cascade,
   h3                bigint      not null,

@@ -2,7 +2,7 @@ import Foundation
 import FogCore
 
 /// Supabase project settings. Fill in from the Supabase dashboard (Project Settings → API).
-/// The anon key is safe to ship in the app; never put the Tiger Data connection string here.
+/// The anon key is safe to ship in the app; never put the service_role key or database URL here.
 public struct BackendConfig: Sendable {
     public var projectURL: URL
     public var anonKey: String

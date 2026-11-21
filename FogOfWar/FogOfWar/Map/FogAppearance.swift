@@ -1,14 +1,18 @@
 import UIKit
 
 /// Presentation-only styles understood by the fog renderer.
-enum FogRevealStyle: Sendable, Equatable {
+nonisolated enum FogRevealStyle: Sendable, Equatable {
     case normal
 }
 
 /// Centralizes the map module's visual constants without creating an app-wide
-/// design-system dependency. Values are intentionally subtle enough that the
-/// real MapKit geography remains the reward for exploration.
-struct FogAppearance {
+/// design-system dependency. Jonathan can tune fog coverage from
+/// `baseFogOpacity` / `baseFogColor` without touching renderer code.
+nonisolated struct FogAppearance: Sendable {
+    /// Primary wash over unexplored map. Keep this high enough that street names
+    /// and building footprints are meaningfully obscured; lower it if the map
+    /// feels too dark. Jonathan owns the final look.
+    let baseFogOpacity: CGFloat
     let baseFogColor: UIColor
     let tealGlowColor: UIColor
     let questMarkerColor: UIColor
@@ -23,17 +27,21 @@ struct FogAppearance {
     let secondaryTextureOpacity: CGFloat
     let primaryDriftVelocity: CGPoint
     let secondaryDriftVelocity: CGPoint
+    /// Atmospheric redraw cadence. Drift is sub-point-per-frame, so a modest rate
+    /// is enough; higher values cost a full visible-rect redraw plus per-cell clears.
     let atmosphericFramesPerSecond: Double
 
     let normalRevealDuration: TimeInterval
     let normalMaximumStagger: TimeInterval
 
     static let `default` = FogAppearance(
+        // Was 0.62 after the first integration PR — streets stayed too readable.
+        baseFogOpacity: 0.84,
         baseFogColor: UIColor(
-            red: 21.0 / 255.0,
-            green: 29.0 / 255.0,
-            blue: 41.0 / 255.0,
-            alpha: 0.62
+            red: 18.0 / 255.0,
+            green: 24.0 / 255.0,
+            blue: 34.0 / 255.0,
+            alpha: 0.84
         ),
         tealGlowColor: UIColor(
             red: 48.0 / 255.0,
@@ -52,11 +60,14 @@ struct FogAppearance {
         revealBloomRadiusScale: 1.9,
         primaryTextureTileSize: 420,
         secondaryTextureTileSize: 690,
-        primaryTextureOpacity: 0.66,
-        secondaryTextureOpacity: 0.48,
+        primaryTextureOpacity: 0.72,
+        secondaryTextureOpacity: 0.52,
         primaryDriftVelocity: CGPoint(x: 0.34, y: 0.11),
         secondaryDriftVelocity: CGPoint(x: -0.16, y: 0.23),
-        atmosphericFramesPerSecond: 8,
+        // 4 fps is enough for the current sub-pixel drift and halves atmospheric
+        // full-viewport redraws versus the previous 8 fps. Physical-device cost of
+        // the per-cell clear pass still needs Instruments on a real iPhone.
+        atmosphericFramesPerSecond: 4,
         normalRevealDuration: 0.78,
         normalMaximumStagger: 0.11
     )

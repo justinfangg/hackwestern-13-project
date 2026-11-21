@@ -19,8 +19,8 @@ Only work that's been pushed to GitHub is counted.
 | FogKit package: location, simulator, expeditions, quest capture, networking (§13 Justin checklist) | Justin | ✅ mostly; API alignment pending | `main`: `Packages/FogKit/` |
 | Temporary dev test screen (map, joystick, quest, expedition, recap/share) | Justin | ✅ | `main`: `FogOfWar/FogOfWar/Dev/` |
 | API contract + mock responses | Vishaal | ✅ (open decisions still to settle) | `main`: `docs/api.md`, `docs/mocks/` |
-| Tiger Data schema, migrations, local Docker DB, schema tests (21/21 pass) | Vishaal | ✅ locally; not yet applied to Tiger Cloud | `main`: `db/`, `scripts/db/`, `docs/backend.md` |
-| Edge Functions, Supabase + Tiger Cloud setup, prompt tuning, quest + demo seeding | Justin (taken over from Vishaal) | ⬜ | |
+| Database schema + schema tests (17/17 pass on Supabase Postgres) | Vishaal, moved to Supabase by Justin | ✅ locally; not yet pushed to a cloud project | `main`: `supabase/migrations/`, `scripts/db/`, `docs/backend.md` |
+| Edge Functions, Supabase project setup, prompt tuning, quest + demo seeding | Justin (taken over from Vishaal) | ⬜ | |
 | Pitch | Vishaal | ⬜ | |
 | Fog renderer + H3 `ExplorationStore` | Ayman | ⬜ (branch `feature/ayman-map-fog` exists, no commits yet) | |
 | Design system, screens, `AuthService` | Jonathan | ⬜ nothing pushed yet | |
@@ -29,12 +29,14 @@ Only work that's been pushed to GitHub is counted.
 
 **Changed since the original plan:**
 - Vishaal hands over all remaining technical work to Justin and focuses on the pitch full-time (§13, §15).
+- **Supabase only:** Tiger Data dropped. All data lives in Supabase Postgres; Timescale features replaced by plain tables and views; the Tiger prize track is no longer targeted (§15).
+- Photo verification uses **Gemini** (hackathon credits) instead of Claude.
 - Completing a quest no longer clears extra fog (Q-9 removed; §15).
 - Justin's code lives in a local Swift package (`Packages/FogKit`) that the app imports, not in app folders. Ayman implements the `ExplorationClearing` protocol instead of subscribing to location himself. See `Packages/FogKit/README.md`.
 
 ### Justin: what's next (in order)
 
-1. **Get access from Vishaal:** has he created the Tiger Cloud service or Supabase project? If so, get access or the connection details (into `.env` only, never committed). If not, create them yourself (step 6).
+1. **Create the Supabase project and Gemini key** (Vishaal hasn't created any services). Keys go in `.env` only, never committed.
 2. **Settle the open decisions in `docs/api.md`** (D1–D12; Justin now decides). Recommended: accept all as proposed. **Remove the quest reveal** from the contract and mocks (`reveal_radius_m` in `quest-today`, the `reveal` object in `verify-quest`).
 3. **Align `FogNetworking` with `docs/api.md`.** My provisional shapes in `APIModels.swift` differ in several places:
    - coordinates are `{ "lat", "lng" }`, not `{ "latitude", "longitude" }`
@@ -44,9 +46,9 @@ Only work that's been pushed to GitHub is counted.
    - error envelope: map `too_far`, `already_completed`, `no_attempts_left`, `not_todays_quest` and `verifier_unavailable` (retry, doesn't use an attempt) to `QuestCaptureModel` states; on any 401, refresh the token and retry once
    - `profile`: new sticker shape, `missed_days`, `expeditions`, `routes`; add `POST profile` (username) for Jonathan's onboarding
    - use the files in `docs/mocks/` as test fixtures, and make `MockFogAPI` return them
-4. **Write the Edge Functions** in `supabase/functions/` (TypeScript; install the CLI with `brew install supabase/tap/supabase`), test locally against the Docker database: `quest-today` → `sync` → `profile` (GET + POST) → `verify-quest`.
-5. **Write and tune the `verify-quest` prompt** (Claude vision) with a folder of test photos: real objects, photos of screens, wrong objects.
-6. **Cloud setup:** Tiger Cloud service (`npm run db:migrate:tiger`), Supabase project (anonymous sign-in, public `stickers` + private `quest-photos` buckets, secrets: Tiger URL, Anthropic key), deploy the functions, put the project URL + anon key in `FogOfWarApp.swift`.
+4. **Write the Edge Functions** in `supabase/functions/` (TypeScript; install the CLI with `brew install supabase/tap/supabase`), test locally against `supabase start`: `quest-today` → `sync` → `profile` (GET + POST) → `verify-quest`.
+5. **Write and tune the `verify-quest` prompt** (Gemini vision) with a folder of test photos: real objects, photos of screens, wrong objects.
+6. **Cloud setup:** link the Supabase project and push the migrations (`npm run db:push`), create the public `stickers` + private `quest-photos` buckets, set the `GEMINI_API_KEY` secret, deploy the functions, put the project URL + anon key in `FogOfWarApp.swift`.
 7. **Seed data:** hand-pick campus quest targets into `daily_quests`; seed the demo account (past expeditions, stickers, a streak).
 8. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
 9. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.
@@ -196,7 +198,7 @@ Priority: **P0** = must ship · **P1** = polish, done once all P0s work end to e
 | P-2 | Path-tracing map: every route the user has walked, drawn over their cleared area, Strava-heatmap style | P0 |
 | P-3 | Lifetime stats: tiles cleared, km travelled, quests completed, current streak | P0 |
 | P-4 | Expedition history list | P1 |
-| P-5 | Weekly activity chart (km and new tiles per week), served from Tiger Data continuous aggregates | P1 |
+| P-5 | Weekly activity chart (km and new tiles per week), served from the `daily_activity` view | P1 |
 
 ### 8.5 Demo / Simulator Mode
 
@@ -241,10 +243,9 @@ Onboarding (P0, minimal): pick a username (creates a Supabase anonymous account 
 | Fog rendering | Custom `MKOverlay` + `MKOverlayRenderer` (see §10.2) | Fast with thousands of cells; full control of the look |
 | Grid | **Uber H3** via Swift package (e.g. `SwiftyH3`), resolution 11 | Hex cells have uniform neighbour distance; IDs are compact `UInt64`s; `gridDisk` gives the vision radius for free |
 | Location | Core Location (`CLLocationUpdate.liveUpdates()`) | Native async stream; background support |
-| Database | **Tiger Data** (Tiger Cloud: Postgres + TimescaleDB + PostGIS) | Hackathon prize track. GPS breadcrumbs are time-series data, so they go in a hypertable; continuous aggregates power stats; PostGIS for the quest geofence |
-| Backend services | **Supabase**, for Auth, Storage and Edge Functions only (no Supabase database) | Sign-in, sticker image hosting, and server code without running our own server; `supabase-swift` SDK |
+| Backend | **Supabase**: Postgres + PostGIS, Auth, Storage, Edge Functions | One service for data, sign-in, images and server code. PostGIS for the quest geofence. (TimescaleDB isn't available on Supabase Postgres 17, so stats use plain views.) |
 | Auth | **Supabase anonymous sign-in** + username | No Apple Developer account on the team, so Sign in with Apple isn't available. Anonymous sign-in still issues a real user id and JWT, so the backend is unchanged |
-| AI verification | Vision LLM called from a Supabase Edge Function (**Claude Haiku 5.5** for speed and cost; **Claude Sonnet 5.5** if accuracy is lacking) | API key stays server-side; structured JSON output |
+| AI verification | **Gemini** vision model called from a Supabase Edge Function (a Flash model for speed; a Pro model if accuracy is lacking) | Hackathon provides Gemini credits; API key stays server-side; structured JSON output |
 | Sticker extraction | **On-device** `VNGenerateForegroundInstanceMaskRequest` (Apple's "lift subject" API) | Free, instant, offline, no server round-trip |
 | Quest object source | OpenStreetMap via Overpass API (pre-fetched) | Has benches, street lamps, trees, hydrants, artwork with exact coordinates |
 | Share cards | SwiftUI `ImageRenderer` + `ShareLink` | Native, no extra deps |
@@ -257,19 +258,17 @@ Leaflet, Mapbox GL JS and Turf.js from the brainstorm are web-only and don't app
 iOS app
   │  Supabase Auth (anonymous sign-in) → JWT
   │
-  ├── Supabase Storage ← sticker PNGs and quest photos (uploaded directly by the app)
-  │
   └── Supabase Edge Functions (every call carries the JWT)
          │  verify JWT → user_id
-         │  Postgres connection string kept in Edge Function secrets
+         │  uploads stickers + quest photos to Supabase Storage (verify-quest)
          ▼
-      Tiger Data (Tiger Cloud service)
-         ├── regular tables: profiles, cleared_tiles, expeditions, daily_quests, quest_completions
-         ├── hypertable:     location_pings
-         └── continuous aggregates: daily_activity, quest_finds_daily
+      Supabase Postgres + PostGIS
+         ├── tables: profiles, cleared_tiles, expeditions, daily_quests, quest_completions,
+         │           location_pings, quest_attempts
+         └── views:  daily_activity, quest_finds_daily
 ```
 
-The app **never connects to Tiger Data directly**; the database credentials live only in Edge Function secrets. Because Supabase's auto-generated table API and row-level security only work with Supabase's own database, every Edge Function must take `user_id` from the verified JWT, never from the request body.
+The app **never reads or writes tables directly**: every table has row-level security on with no policies, so the anon key and user JWTs can't touch them through Supabase's REST API. Edge Functions are the only database client; each one takes `user_id` from the verified JWT, never from the request body.
 
 #### API (Supabase Edge Functions)
 
@@ -316,7 +315,7 @@ LocationProvider (protocol)
    ExplorationStore (in-memory Set + SwiftData persistence)
           │                     │
           ▼                     ▼
-   FogRenderer.invalidate   SyncQueue → `sync` Edge Function → Tiger Data
+   FogRenderer.invalidate   SyncQueue → `sync` Edge Function → Postgres
                             (new tiles + accepted fixes as location_pings,
                              batched every 30 s / on End)
 ```
@@ -329,7 +328,7 @@ LocationProvider (protocol)
 1. **Region** = H3 res 7 cell containing the user.
 2. On the first request per region per day, the `quest-today` Edge Function:
    - Picks today's object category with a seeded RNG: `seed = hash(regionCell, YYYY-MM-DD)`.
-   - Queries a pre-fetched OSM table in Tiger Data (populated via Overpass) for features of that category within the region:
+   - Queries a pre-fetched OSM table in Postgres (populated via Overpass) for features of that category within the region:
      - bench → `amenity=bench`
      - lamppost → `highway=street_lamp`
      - tree → `natural=tree`
@@ -349,7 +348,7 @@ In-app camera capture
    │
    ▼
 Upload photo (JPEG, ≤ 1024 px) + GPS + timestamp → Edge Function `verify-quest`
-   │  checks: user within 40 m of quest target (server-side, PostGIS ST_DWithin in Tiger Data)
+   │  checks: user within 40 m of quest target (server-side, PostGIS ST_DWithin)
    │          quest is today's quest for that region
    │          attempts < 5
    ▼
@@ -359,7 +358,7 @@ in person (not a screen or printout)? Respond JSON:
    │
    ▼
 verified && confidence ≥ 0.7 → store sticker PNG in Supabase Storage,
-                               insert `quest_completions` in Tiger Data
+                               insert `quest_completions`
    │
    ▼
 Client plays sticker reveal animation
@@ -368,10 +367,10 @@ Client plays sticker reveal animation
 - If the subject mask fails (busy scene), fall back to a circular crop of the centre.
 - Target latency: < 4 s end to end.
 
-### 10.6 Data Model (Tiger Data)
+### 10.6 Data Model (Supabase Postgres)
 
 ```sql
-profiles(id uuid pk,             -- = Supabase Auth user id
+profiles(id uuid pk → auth.users,  -- = Supabase Auth user id
          username text, avatar_url text, created_at)
 
 cleared_tiles(user_id uuid, h3 bigint, first_cleared_at timestamptz,
@@ -387,24 +386,24 @@ daily_quests(id uuid pk, region_h3 bigint, quest_date date, category text,
 quest_completions(id uuid pk, quest_id, user_id, photo_url text, sticker_url text,
                   confidence float, completed_at, unique (quest_id, user_id))
 
--- Time-series: every accepted GPS fix
+-- Every accepted GPS fix; primary key (user_id, ts) makes sync retries no-ops
 location_pings(user_id uuid, expedition_id uuid, ts timestamptz,
-               location geography(Point), accuracy_m float, speed_mps float)
-SELECT create_hypertable('location_pings', by_range('ts'));
+               location geography(Point), accuracy_m float, speed_mps float,
+               segment_m float, segment_s float)
+
+-- One row per vision-model call (5/day limit, "found today")
+quest_attempts(id, user_id, quest_id, ts, verified bool, confidence, reason)
+
+-- Views (Toronto calendar days)
+daily_activity(user_id, day, distance_m, active_minutes, pings)     -- P-3, P-5
+quest_finds_daily(quest_id, day, finds, attempts)                   -- Q-11
 ```
 
-**Timescale features we use** (the Tiger Data prize story):
-
-| Feature | Used for |
-|---|---|
-| `location_pings` hypertable | Source of truth for path tracing (P-2) and expedition routes; scales to millions of fixes |
-| `daily_activity` continuous aggregate (`time_bucket('1 day', ts)` per user: distance, active minutes, ping count) | Lifetime stats (P-3) and the weekly activity chart (P-5) without scanning raw pings |
-| `quest_finds_daily` continuous aggregate (completions per quest per day) | "N found today" count (Q-11) |
-| Compression policy on `location_pings` older than 7 days | Keeps storage small; mention in the pitch |
+Full definitions: `supabase/migrations/`.
 
 Streak is computed from `quest_completions`. The "N found today" count is shown as a count only, never names or locations.
 
-Access control: no row-level security (that's a Supabase-database feature). Edge Functions are the only database client and filter every query by the JWT's `user_id`.
+Access control: row-level security on every table with no policies, and API privileges revoked, so only Edge Functions (which bypass RLS) can read or write. They filter every query by the JWT's `user_id`. Every new table must do the same.
 
 ### 10.7 Client Module Layout
 
@@ -468,11 +467,11 @@ UI design is owned by **Jonathan** and built in parallel with feature logic, so 
 All P0s in §8: F-1–F-5 · E-1–E-3 · Q-1–Q-9 · P-1–P-3 · D-1–D-6
 
 ### Polish (once the P0 flow works end to end)
-F-6, F-7 (fog animation and soft edges) · Q-10 (sticker animation) · E-5 (story-format card) · Q-11 (found-today count) · P-5 (weekly activity chart, for the Tiger Data prize) · then remaining P1s
+F-6, F-7 (fog animation and soft edges) · Q-10 (sticker animation) · E-5 (story-format card) · Q-11 (found-today count) · P-5 (weekly activity chart) · then remaining P1s
 
 ### Team split
 
-Vishaal wrote the API contract and the Tiger Data schema, then handed all remaining technical work to Justin so he can focus on the pitch full-time. Justin now owns both sides of the API (app networking and the backend), which removes the main integration risk.
+Vishaal wrote the API contract and the database schema, then handed all remaining technical work to Justin so he can focus on the pitch full-time. Justin now owns both sides of the API (app networking and the backend), which removes the main integration risk.
 
 | Member | Area | Requirements | Modules (§10.7) |
 |---|---|---|---|
@@ -509,11 +508,11 @@ Vishaal wrote the API contract and the Tiger Data schema, then handed all remain
 
 **Backend (taken over from Vishaal):**
 - [x] API contract in `docs/api.md` with mocks *(Vishaal)*. Open decisions D1–D12 still to settle; remove the quest reveal
-- [x] Tiger Data schema: PostGIS, `location_pings` + `quest_attempts` hypertables, continuous aggregates, columnstore policy, local Docker DB, schema tests *(Vishaal)*
-- [ ] Tiger Cloud service + apply migrations (`npm run db:migrate:tiger`)
-- [ ] Supabase project: anonymous sign-in, public `stickers` + private `quest-photos` buckets, Edge Function secrets
+- [x] Database schema and schema tests *(Vishaal, written for Tiger Data)*
+- [x] Move the schema to Supabase Postgres: plain tables + views, row-level security, tests on Supabase's Postgres image *(Justin)*
+- [ ] Supabase project: anonymous sign-in, push migrations, public `stickers` + private `quest-photos` buckets, `GEMINI_API_KEY` secret
 - [ ] Edge Functions `sync`, `quest-today`, `profile` (GET + POST), each taking `user_id` from the verified JWT (§10.1)
-- [ ] `verify-quest` Edge Function: checks, geofence, attempt limit, Claude vision call, Storage upload on success (Q-7, §10.5)
+- [ ] `verify-quest` Edge Function: checks, geofence, attempt limit, Gemini vision call, Storage upload on success (Q-7, §10.5)
 - [ ] Prompt tuning with a folder of test photos (real objects, photos of screens, wrong objects)
 - [ ] Hand-seed `daily_quests` for the campus area (OSM Overpass script optional) (Q-1, Q-2, Q-3)
 - [ ] Seed the demo account (past expeditions, stickers, a streak)
@@ -533,12 +532,11 @@ Vishaal wrote the API contract and the Tiger Data schema, then handed all remain
 - [ ] App icon; design pass over every screen in the demo flow before feature freeze
 
 #### Vishaal: Pitch
-Technical work so far (merged to `main`): API contract + mocks (`docs/api.md`), Tiger Data schema + migrations + tests (`db/`, `scripts/db/`, `docs/backend.md`). Everything else technical is now Justin's.
+Technical work so far (merged to `main`): API contract + mocks (`docs/api.md`) and the database schema + tests (now in `supabase/migrations/` and `scripts/db/`). Everything else technical is now Justin's.
 
-- [ ] **Handover:** tell Justin whether a Tiger Cloud service or Supabase project already exists, and share access (connection strings via a private channel, never in the repo)
+- [x] **Handover:** no cloud services had been created yet; Justin sets them up
 - [ ] Pick the demo-day quest object to bring on stage (D11, e.g. a potted plant as a `tree`)
 - [ ] Slides and 3-minute script (follow the demo script in §13)
-- [ ] Tiger Data prize talking points: hypertables for GPS pings, continuous aggregates for stats and "found today", columnstore compression
 - [ ] Devpost write-up
 - [ ] Coordinate the backup demo video and run rehearsals
 
@@ -568,7 +566,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 ### Timeline
 | Hours | Milestone |
 |---|---|
-| 0–3 | Xcode project, Tiger Cloud service, Supabase project, H3 package compiling, module skeleton on `main`; API contract (Vishaal, done) and `Theme` + mockups (Jonathan) |
+| 0–3 | Xcode project, Supabase project, H3 package compiling, module skeleton on `main`; API contract (Vishaal, done) and `Theme` + mockups (Jonathan) |
 | 3–10 | Static fog over MapKit with holes from a hardcoded tile set; joystick moving a dot; camera + subject lift working standalone |
 | 10–18 | End-to-end clearing (location → tiles → fog); verification Edge Function returning JSON; auth + sync |
 | 18–24 | Quest geofence + sticker; Profile sticker book + path trace; expedition card + share. **Full P0 flow works end to end.** |
@@ -592,7 +590,6 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Venue Wi-Fi is flaky for AI verification | Use a phone hotspot; on-device fallback (`VNClassifyImageRequest` label match) behind the debug toggle |
 | OSM objects are missing or misplaced | Hand-picked quest targets for the demo; post-hack, let users report "object not found" and reroll |
 | AI accepts fake photos (photo of a screen) | Prompt asks explicitly about screens and printouts; in-app camera only; GPS geofence checked server-side |
-| Tiger Data free plan is in beta, US East only, no connection pooler | Batch syncs to keep connection count low; open one connection per Edge Function call and close it; ask the Tiger sponsor for credits on a paid plan with pooling |
 | No Apple Developer account: anonymous accounts are lost if the app is deleted; apps installed from Xcode with a free account expire after 7 days | Fine for the hackathon; reinstall from Xcode before the demo. Post-hackathon: let users link an email to their anonymous account (Supabase supports this) |
 | H3 Swift package build issues | Fallback: square grid from quantized lat/lng (`floor(lat / Δ), floor(lng / Δ)`), ~20 m cells, behind the same `TileID` abstraction |
 | Scope creep | §2 is the scope. New ideas go to §16 |
@@ -606,8 +603,9 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Seeing other players | Hackathon: anonymous "N found today" count only. No live positions ever | Community signal without stalking risk |
 | Vision radius | Fixed at 30 m | A growing radius would clear streets the user never walked |
 | Feature scope | Two core loops + expedition card + profile + demo mode; everything else cut | A polished core wins more than many half-working features |
-| Database | Tiger Data for all data; Supabase kept only for Auth, Storage and Edge Functions (Option A) | Tiger Data prize track. GPS history is time-series data, which fits Tiger well. Keeping Supabase avoids building our own auth, file storage and API server |
+| Database | **Supabase Postgres only** (changed 2026-11-21; briefly planned Tiger Data for the prize track) | One service instead of two. TimescaleDB isn't available on Supabase Postgres 17, so hypertables/continuous aggregates became plain tables and views, which are fine at hackathon scale. The Tiger prize track is no longer targeted |
 | Technical ownership | Vishaal hands all remaining technical work (Edge Functions, cloud setup, prompt, seeding) to Justin and focuses on the pitch | Lets Vishaal focus on the pitch; one person owning both sides of the API removes the biggest integration risk. Vishaal's contract and schema were high quality and are kept as-is |
+| AI verification provider | Gemini instead of Claude | Hack Western provides Gemini credits |
 | Sign-in | Supabase anonymous sign-in + username; no Sign in with Apple | Nobody on the team has a paid Apple Developer account, which Sign in with Apple requires |
 | Name | Keep "Fog of War IRL" for the hackathon | Says exactly what the app does in a 3-minute pitch |
 

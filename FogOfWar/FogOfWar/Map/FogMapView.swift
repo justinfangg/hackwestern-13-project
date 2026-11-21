@@ -19,6 +19,8 @@ struct FogMapView: UIViewRepresentable {
     /// Optional route polylines (active expedition or profile path tracing). Each
     /// inner array is one continuous segment — never join across gaps.
     var routeSegments: [[CLLocationCoordinate2D]] = []
+    /// Route stroke; the active quest passes its own beacon color.
+    var routeColor: UIColor = UIColor(red: 1, green: 0xBD / 255, blue: 0x3A / 255, alpha: 1)
     /// Keeps MapKit's legal label clear of chrome drawn over the map.
     var mapChromeInsets: UIEdgeInsets = .zero
     var recenterToken: Int
@@ -59,6 +61,7 @@ struct FogMapView: UIViewRepresentable {
         private var playerHeading: CLLocationDirection?
         private var routeOverlays: [MKPolyline] = []
         private var renderedRouteSegments: [[CLLocationCoordinate2D]] = []
+        private var renderedRouteColor: UIColor?
         private weak var mapView: MKMapView?
         private weak var dispersalView: CloudDispersalView?
 
@@ -275,6 +278,16 @@ struct FogMapView: UIViewRepresentable {
         }
 
         private func updateRouteOverlays(on mapView: MKMapView) {
+            // Recolor in place (e.g. the quest turning green once collected).
+            if renderedRouteColor != parent.routeColor {
+                renderedRouteColor = parent.routeColor
+                for polyline in routeOverlays {
+                    guard let renderer = mapView.renderer(for: polyline) as? MKPolylineRenderer else { continue }
+                    renderer.strokeColor = parent.routeColor
+                    renderer.setNeedsDisplay()
+                }
+            }
+
             let desired = parent.routeSegments.filter { $0.count >= 2 }
             guard !Self.routeSegmentsEqual(renderedRouteSegments, desired) else { return }
 
@@ -287,7 +300,9 @@ struct FogMapView: UIViewRepresentable {
             routeOverlays = polylines
             renderedRouteSegments = desired
             if !polylines.isEmpty {
-                mapView.addOverlays(polylines, level: .aboveRoads)
+                // Same level as the clouds but added later, so the walked
+                // route draws on top of any cloud edge it brushes past.
+                mapView.addOverlays(polylines, level: .aboveLabels)
             }
         }
 
@@ -343,8 +358,9 @@ struct FogMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
-                renderer.strokeColor = UIColor(red: 1.0, green: 0.55, blue: 0.18, alpha: 0.92)
-                renderer.lineWidth = 4
+                // Figma route: 5 pt, round caps/joins, in the quest's color.
+                renderer.strokeColor = parent.routeColor
+                renderer.lineWidth = 5
                 renderer.lineCap = .round
                 renderer.lineJoin = .round
                 return renderer

@@ -19,6 +19,8 @@ struct QuestMarkerData: Identifiable, Equatable {
     var subtitle: String?
     var participantCount: Int
     var status: Status
+    /// Whether the name/participants pill is drawn next to the beacon.
+    var showsLabel: Bool
 
     init(
         id: String,
@@ -26,7 +28,8 @@ struct QuestMarkerData: Identifiable, Equatable {
         title: String,
         subtitle: String? = nil,
         participantCount: Int = 0,
-        status: Status = .active
+        status: Status = .active,
+        showsLabel: Bool = true
     ) {
         self.id = id
         self.coordinate = coordinate
@@ -34,6 +37,7 @@ struct QuestMarkerData: Identifiable, Equatable {
         self.subtitle = subtitle
         self.participantCount = participantCount
         self.status = status
+        self.showsLabel = showsLabel
     }
 
     static func == (lhs: QuestMarkerData, rhs: QuestMarkerData) -> Bool {
@@ -44,6 +48,7 @@ struct QuestMarkerData: Identifiable, Equatable {
             && lhs.subtitle == rhs.subtitle
             && lhs.participantCount == rhs.participantCount
             && lhs.status == rhs.status
+            && lhs.showsLabel == rhs.showsLabel
     }
 }
 
@@ -159,6 +164,13 @@ final class QuestAnnotationView: MKAnnotationView {
             width: pillSize.width,
             height: pillSize.height
         )
+        let pillAlpha: CGFloat = data.showsLabel ? 1 : 0
+        if pillHost.view.alpha != pillAlpha {
+            UIView.animate(withDuration: 0.3, delay: 0, options: [.beginFromCurrentState]) {
+                self.pillHost.view.alpha = pillAlpha
+                self.pillHost.view.transform = data.showsLabel ? .identity : CGAffineTransform(scaleX: 0.85, y: 0.85)
+            }
+        }
 
         accessibilityLabel = "\(data.title) quest"
         accessibilityValue = data.participantCount == 1
@@ -167,7 +179,8 @@ final class QuestAnnotationView: MKAnnotationView {
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        super.point(inside: point, with: event) || pillHost.view.frame.contains(point)
+        super.point(inside: point, with: event)
+            || (pillHost.view.alpha > 0 && pillHost.view.frame.contains(point))
     }
 }
 

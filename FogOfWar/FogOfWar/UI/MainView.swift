@@ -1,4 +1,5 @@
 import SwiftUI
+import FogKit
 
 /// Root layout from Figma: the map page and the profile page sit in two
 /// rounded containers on a dark canvas. The handle in the gap between them
@@ -17,6 +18,7 @@ struct MainView: View {
     /// Live split position while dragging/settling. `nil` means "at `detent`".
     @State private var mapHeight: CGFloat?
     @State private var dragStartHeight: CGFloat?
+    @Environment(FogServices.self) private var services
 
     var body: some View {
         // Read the real insets here (this reader respects the safe area), then
@@ -39,33 +41,49 @@ struct MainView: View {
     }
 
     private func content(metrics: SplitMetrics) -> some View {
-        let height = mapHeight ?? metrics.height(for: detent)
+        // Accepting a quest takes the map (almost) full screen (Figma 16:238):
+        // the profile slides away and the split handle is retired.
+        let height = isOnQuest
+            ? metrics.questMapHeight
+            : mapHeight ?? metrics.height(for: detent)
+        let cornerRadius = isOnQuest ? 0 : SideQuestDesign.containerCornerRadius
+
         return ZStack(alignment: .top) {
-                SideQuestDesign.canvas
+            SideQuestDesign.canvas
 
-                ProfilePage()
-                    .frame(width: metrics.size.width, height: metrics.size.height)
-                    .offset(y: height + SideQuestDesign.splitGap)
+            ProfilePage()
+                .frame(width: metrics.size.width, height: metrics.size.height)
+                .offset(y: height + SideQuestDesign.splitGap)
 
-                MapPage(
-                    visibleHeight: height,
-                    fullSize: metrics.size,
-                    safeArea: metrics.safeArea
+            MapPage(
+                visibleHeight: height,
+                fullSize: metrics.size,
+                safeArea: metrics.safeArea
+            )
+            .frame(width: metrics.size.width, height: max(height, 0))
+            .clipShape(
+                UnevenRoundedRectangle(
+                    bottomLeadingRadius: cornerRadius,
+                    bottomTrailingRadius: cornerRadius,
+                    style: .continuous
                 )
-                .frame(width: metrics.size.width, height: max(height, 0))
-                .clipShape(
-                    UnevenRoundedRectangle(
-                        bottomLeadingRadius: SideQuestDesign.containerCornerRadius,
-                        bottomTrailingRadius: SideQuestDesign.containerCornerRadius,
-                        style: .continuous
-                    )
-                )
+            )
 
-                splitHandle(metrics: metrics, currentHeight: height)
-                    .offset(y: height + SideQuestDesign.splitGap / 2 - Self.handleHitHeight / 2)
-            }
-            .frame(width: metrics.size.width, height: metrics.size.height, alignment: .top)
+            splitHandle(metrics: metrics, currentHeight: height)
+                .offset(y: height + SideQuestDesign.splitGap / 2 - Self.handleHitHeight / 2)
+                .opacity(isOnQuest ? 0 : 1)
+                .allowsHitTesting(!isOnQuest)
+        }
+        .frame(width: metrics.size.width, height: metrics.size.height, alignment: .top)
+        // Also covers a quest ending from elsewhere (e.g. the recap flow).
+        .animation(Self.questTransition, value: isOnQuest)
     }
+
+    /// Spring used for entering/leaving the active-quest layout.
+    static let questTransition: Animation = .spring(duration: 0.6, bounce: 0.14)
+
+    /// A quest is "accepted" while its expedition is recording.
+    private var isOnQuest: Bool { services.expeditions.active != nil }
 
     private static let handleHitHeight: CGFloat = 52
 
@@ -150,6 +168,10 @@ private struct SplitMetrics {
 
     private var profilePeek: CGFloat { 67 }
     private var minimumMapHeight: CGFloat { safeArea.top + 118 }
+
+    /// Map height while a quest is active: edge to edge. (Figma stops 10 pt
+    /// short, which reads as a stray dark band against the device's corners.)
+    var questMapHeight: CGFloat { size.height }
 
     var range: ClosedRange<CGFloat> {
         height(for: .profile) ... height(for: .map)

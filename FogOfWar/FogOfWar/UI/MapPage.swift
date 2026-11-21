@@ -26,6 +26,12 @@ struct MapPage: View {
 
     private static let sheetBottomMargin: CGFloat = 23
     private static let sheetHorizontalMargin: CGFloat = 30.5
+    /// Active-quest card insets (Figma 16:383: 388 pt wide, 8 pt off the bottom).
+    private static let questCardSideMargin: CGFloat = 7
+    private static let questCardBottomMargin: CGFloat = 8
+
+    /// A quest is "accepted" while its expedition is recording.
+    private var isOnQuest: Bool { services.expeditions.active != nil }
 
     var body: some View {
         map
@@ -99,6 +105,7 @@ struct MapPage: View {
                              ?? services.location.currentCoordinate)?.clCoordinate,
             questMarkers: questMarkers,
             routeSegments: activeRouteSegments,
+            routeColor: UIColor(questStatus == .completed ? SideQuestDesign.questCompleted : SideQuestDesign.questActive),
             mapChromeInsets: mapChromeInsets,
             recenterToken: recenterToken,
             onMapTap: { _ in },
@@ -111,16 +118,26 @@ struct MapPage: View {
     /// player inside these margins, so top and bottom stay equal to keep the
     /// dot at the map view's center (the visible center, plus `mapShift`).
     private var mapChromeInsets: UIEdgeInsets {
-        let chrome = chromeOpacity > 0.5
-            ? Self.sheetBottomMargin + QuestSheet<EmptyView>.collapsedHeight + 6
-            : 10
+        let chrome: CGFloat = if isOnQuest {
+            Self.questCardBottomMargin + ActiveQuestCard.height + 6
+        } else if chromeOpacity > 0.5 {
+            Self.sheetBottomMargin + QuestSheet<EmptyView>.collapsedHeight + 6
+        } else {
+            10
+        }
         let vertical = hiddenMapHeight + mapShift + chrome
         return UIEdgeInsets(top: vertical, left: 24, bottom: vertical, right: 24)
     }
 
+    private var questStatus: QuestMarkerData.Status {
+        switch services.questCapture.state {
+        case .success, .alreadyCompleted: return .completed
+        default: return .active
+        }
+    }
+
     private var questMarkers: [QuestMarkerData] {
         guard let quest = services.quests.today else { return [] }
-        let collected: Bool = if case .success = services.questCapture.state { true } else { false }
         return [
             QuestMarkerData(
                 id: quest.id.uuidString,
@@ -128,7 +145,9 @@ struct MapPage: View {
                 title: quest.category.capitalized,
                 subtitle: quest.title,
                 participantCount: quest.foundTodayCount,
-                status: collected ? .completed : .active
+                status: questStatus,
+                // The accepted-quest frame shows only the beacon.
+                showsLabel: !isOnQuest
             )
         ]
     }
@@ -166,19 +185,65 @@ struct MapPage: View {
             .frame(height: 46)
             .allowsHitTesting(false)
 
-            QuestSheet(
-                maxHeight: visibleHeight / 2 - Self.sheetBottomMargin,
-                isExpanded: $isQuestSheetExpanded
-            ) {
-                QuestSheetContent(
-                    onTakePhoto: takePhoto,
-                    onShowDebug: { showDebug = true }
+            if isOnQuest, let quest = services.quests.today, let expedition = services.expeditions.active {
+                ActiveQuestCard(
+                    quest: quest,
+                    startedAt: expedition.startedAt,
+                    captureState: services.questCapture.state,
+                    distanceToTarget: services.questCapture.distanceToTarget,
+                    onAbandon: abandonQuest,
+                    onCapture: captureFromCard
                 )
+                .padding(.horizontal, Self.questCardSideMargin)
+                .padding(.bottom, Self.questCardBottomMargin)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                QuestSheet(
+                    maxHeight: visibleHeight / 2 - Self.sheetBottomMargin,
+                    isExpanded: $isQuestSheetExpanded
+                ) {
+                    QuestSheetContent(
+                        onAccept: acceptQuest,
+                        onTakePhoto: takePhoto,
+                        onShowDebug: { showDebug = true }
+                    )
+                }
+                .padding(.horizontal, Self.sheetHorizontalMargin)
+                .padding(.bottom, Self.sheetBottomMargin)
+                .opacity(chromeOpacity)
+                .allowsHitTesting(chromeOpacity > 0.5)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .padding(.horizontal, Self.sheetHorizontalMargin)
-            .padding(.bottom, Self.sheetBottomMargin)
-            .opacity(chromeOpacity)
-            .allowsHitTesting(chromeOpacity > 0.5)
+        }
+    }
+
+    // MARK: Quest lifecycle
+
+    /// Accepting a quest starts recording the route; the layout reacts to
+    /// `isOnQuest` (MainView expands the map to full screen).
+    private func acceptQuest() {
+        withAnimation(MainView.questTransition) {
+            isQuestSheetExpanded = false
+            services.expeditions.start()
+        }
+        recenterToken &+= 1
+    }
+
+    /// The card's capture button doubles as "try again" after a failed photo.
+    private func captureFromCard() {
+        let capture = services.questCapture
+        switch capture.state {
+        case .rejected, .tooFar, .error:
+            capture.retry()
+            if case .ready = capture.state { takePhoto() }
+        default:
+            takePhoto()
+        }
+    }
+
+    private func abandonQuest() {
+        withAnimation(MainView.questTransition) {
+            services.expeditions.end()
         }
     }
 
@@ -235,8 +300,9 @@ struct MapPage: View {
 }
 
 /// Expanded body of the Quests sheet: today's quest, capture status and the
-/// expedition controls.
+/// button that accepts it.
 private struct QuestSheetContent: View {
+    let onAccept: () -> Void
     let onTakePhoto: () -> Void
     let onShowDebug: () -> Void
 
@@ -302,7 +368,7 @@ private struct QuestSheetContent: View {
             Button("Take photo", systemImage: "camera.fill", action: onTakePhoto)
                 .buttonStyle(.borderedProminent)
                 .tint(SideQuestDesign.questActive)
-        case .rejected, .error:
+        case .rejected, .error, .tooFar:
             Button("Retry") { capture.retry() }
                 .buttonStyle(.bordered)
         default:
@@ -310,25 +376,15 @@ private struct QuestSheetContent: View {
         }
     }
 
+    /// The sheet is only on screen before a quest is accepted; once accepted
+    /// the active-quest card takes over (see `MapPage.bottomChrome`).
     private var expeditionRow: some View {
-        let expeditions = services.expeditions
-        return HStack {
-            if let active = expeditions.active {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let seconds = Int(context.date.timeIntervalSince(active.startedAt))
-                    Text("\(Int(active.distanceMeters)) m · \(active.newTiles) tiles · \(seconds / 60):\(String(format: "%02d", seconds % 60))")
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("End", role: .destructive) { expeditions.end() }
-                    .buttonStyle(.bordered)
-            } else {
-                Button("Start expedition", systemImage: "figure.walk") { expeditions.start() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(SideQuestDesign.questCompleted)
-                Spacer()
-            }
+        HStack {
+            Button("Accept quest", systemImage: "figure.walk", action: onAccept)
+                .buttonStyle(.borderedProminent)
+                .tint(SideQuestDesign.questCompleted)
+                .disabled(services.quests.today == nil)
+            Spacer()
             #if DEBUG
             Button("Debug", systemImage: "ladybug", action: onShowDebug)
                 .labelStyle(.iconOnly)
@@ -357,6 +413,8 @@ private struct QuestSheetContent: View {
         case .verifying: return "Verifying…"
         case .success(let sticker): return "Collected \(sticker.category) sticker"
         case .rejected(let reason, let left): return "Not verified: \(reason) (\(left) left)"
+        case .tooFar(let distance): return "Photo was \(Int(distance)) m away, get closer"
+        case .alreadyCompleted: return "Already found today"
         case .outOfAttempts: return "Out of attempts today"
         case .error(let message): return message
         }

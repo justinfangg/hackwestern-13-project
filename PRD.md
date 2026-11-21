@@ -1,9 +1,51 @@
 # PRD: Fog of War IRL
 
 > Working title. Hack Western 13 project. Native iOS app (SwiftUI).
-> Status: Draft v0.2 (2026-11-21). Scope locked to core features.
+> Status: Draft v0.2 (2026-11-21). Scope locked to core features. Progress last updated 2026-11-21 (see §0).
 
 ---
+
+## 0. Progress
+
+Legend: ✅ done · 🟡 started / done but needs work · ⬜ not started.
+Only work that's been pushed to GitHub is counted.
+
+### Overall
+
+| Area | Owner | Status | Where |
+|---|---|---|---|
+| PRD, team split, tech stack | All | ✅ | `main` |
+| Xcode app project (iOS 17+, iPhone portrait, permissions, background location) | Justin | ✅ | `main`: `FogOfWar/` |
+| FogKit package: location, simulator, expeditions, quest capture, networking (§13 Justin checklist) | Justin | ✅ mostly; API alignment pending | `main`: `Packages/FogKit/` |
+| Temporary dev test screen (map, joystick, quest, expedition, recap/share) | Justin | ✅ | `main`: `FogOfWar/FogOfWar/Dev/` |
+| API contract + mock responses | Vishaal | 🟡 written, not merged | branch `docs/v1-api-contract` |
+| Tiger Data schema + migrations (local TimescaleDB/PostGIS) | Vishaal | 🟡 written, not merged | branch `backend/v2-tiger-schema` |
+| Edge Functions, Supabase project, quest seeding | Vishaal | ⬜ | |
+| Fog renderer + H3 `ExplorationStore` | Ayman | ⬜ (branch `feature/ayman-map-fog` exists, no commits yet) | |
+| Design system, screens, `AuthService` | Jonathan | ⬜ nothing pushed yet | |
+
+**What works today:** run `FogOfWar/FogOfWar.xcodeproj` on the iPhone Simulator. The joystick moves you, tiles clear (shown as blue dots until Ayman's fog lands), expeditions track distance, tiles and time, the quest unlocks within 40 m, a photo "verifies" against the mock backend and becomes a sticker, and the recap card can be shared. Everything uses `MockFogAPI` and `GridExplorer` stand-ins.
+
+**Changed since the original plan:**
+- Completing a quest no longer clears extra fog (Q-9 removed; §15).
+- Justin's code lives in a local Swift package (`Packages/FogKit`) that the app imports, not in app folders. Ayman implements the `ExplorationClearing` protocol instead of subscribing to location himself. See `Packages/FogKit/README.md`.
+
+### Justin: what's next (in order)
+
+1. **Answer Vishaal's open decisions that affect you** (`docs/api.md` → Open decisions on his branch): D3 (server uploads stickers, so drop `StickerStorage`), D4, D6, D8, D12. **Also tell him to drop `reveal_radius_m` and the `reveal` object** from `quest-today` and `verify-quest`: the quest reveal was removed.
+2. **Align `FogNetworking` with `docs/api.md`** once it's merged. My provisional shapes in `APIModels.swift` differ in several places:
+   - coordinates are `{ "lat", "lng" }`, not `{ "latitude", "longitude" }`
+   - `sync`: pings use `ts` (with milliseconds) / `lat` / `lng` / `accuracy_m` / `speed_mps`; tiles use `h3`; expeditions have no route segments (the server builds routes from pings) and must be sent with any batch containing their pings; limits are 5000 tiles / 2000 pings / 50 expeditions
+   - `quest-today`: new wrapper (`status`, `found_today`, `completed_by_me`, `attempts_left`, `resets_at`); the quest has `place_name`, `geofence_radius_m`, no `title`
+   - `verify-quest`: request sends `lat`, `lng`, `accuracy_m`, `photo_jpeg_base64` **and** `sticker_png_base64` (≤ 512 px); response has `attempts_left`, `completion.sticker_url`, `streak`; the client must **not** re-check confidence
+   - error envelope: map `too_far`, `already_completed`, `no_attempts_left`, `not_todays_quest` and `verifier_unavailable` (retry, doesn't use an attempt) to `QuestCaptureModel` states; on any 401, refresh the token and retry once
+   - `profile`: new sticker shape, `missed_days`, `expeditions`, `routes`; add `POST profile` (username) for Jonathan's onboarding
+   - use the files in `docs/mocks/` as test fixtures, and make `MockFogAPI` return them
+3. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
+4. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.
+5. **Test on a real iPhone:** walking GPS, background location with the screen locked, camera, Vision sticker cutout (doesn't run in the Simulator).
+6. **Swap in the real demo route** when Vishaal draws it (`Packages/FogKit/Sources/FogLocation/Resources/demo-route.gpx`).
+7. **Integrate teammates' pieces as they land:** Ayman's `ExplorationStore` and Jonathan's `AuthService` in `FogOfWarApp.swift`, then remove `Dev/` once Jonathan's screens cover the flow.
 
 ## 1. Summary
 
@@ -441,19 +483,20 @@ Vishaal doesn't have a Mac, so he owns everything that runs off-device (database
 - [ ] Polish: fog dissolve on clear, drifting cloud texture, soft edges (F-6, F-7)
 
 #### Justin: Location, expeditions, demo mode, quest capture & app networking
-- [ ] `LocationProvider` protocol + `RealLocationProvider` (`CLLocationUpdate.liveUpdates`)
-- [ ] `FixFilter` (accuracy/speed/dedupe) and the 10 m interpolator (F-4, F-8)
-- [ ] `ExpeditionManager`: Start/End, path, distance, duration, new tiles (E-1)
-- [ ] Background location during an active expedition (E-4)
-- [ ] Recap-card data (`ExpeditionSummary`) + `ImageRenderer`/`ShareLink` export of Jonathan's card view (E-3)
-- [ ] Simulator Mode: hidden toggle, joystick (by hour 10), GPX Auto-Walk, Reset fog (D-1–D-6)
-- [ ] `QuestCaptureModel`: geofence gate (within 40 m → `canCapture`), state machine idle → capturing → verifying → success/failure (Q-5)
-- [ ] In-app camera (`AVCaptureSession`), no photo library access (Q-6)
-- [ ] `StickerExtractor` with `VNGenerateForegroundInstanceMaskRequest`, circular-crop fallback (Q-8)
-- [ ] On-device fallback (`VNClassifyImageRequest`) behind the debug toggle (§14)
-- [ ] `APIClient` for the four Edge Functions, built against Vishaal's API contract (mock responses until the functions are live)
-- [ ] `SyncQueue` (cleared tiles + location pings, batched) and `StickerStorage` upload (F-3 sync)
-- [ ] `QuestService.today()` and `ProfileModel` (stats, streak, sticker list, weekly activity) feeding Jonathan's views (Q-11, P-3, P-5)
+- [x] `LocationProvider` protocol + `RealLocationProvider` (`CLLocationUpdate.liveUpdates`)
+- [x] `FixFilter` (accuracy/speed/dedupe) and the 10 m interpolator (F-4, F-8)
+- [x] `ExpeditionManager`: Start/End, path, distance, duration, new tiles (E-1)
+- [x] Background location during an active expedition (E-4). *Untested on a real phone*
+- [x] Recap-card data (`ExpeditionSummary`) + `ImageRenderer`/`ShareLink` export of Jonathan's card view (E-3)
+- [x] Simulator Mode: hidden toggle, joystick (by hour 10), GPX Auto-Walk, Reset fog (D-1–D-6). *Demo route is a placeholder*
+- [x] `QuestCaptureModel`: geofence gate (within 40 m → `canCapture`), state machine idle → capturing → verifying → success/failure (Q-5)
+- [x] In-app camera (`AVCaptureSession`), no photo library access (Q-6). *Untested on a real phone*
+- [x] `StickerExtractor` with `VNGenerateForegroundInstanceMaskRequest`, circular-crop fallback (Q-8). *Untested on a real phone*
+- [x] On-device fallback (`VNClassifyImageRequest`) behind the debug toggle (§14)
+- [ ] 🟡 `APIClient` for the four Edge Functions, built against Vishaal's API contract (mock responses until the functions are live). *Built against provisional shapes; needs aligning with `docs/api.md` (§0)*
+- [ ] 🟡 `SyncQueue` (cleared tiles + location pings, batched) and `StickerStorage` upload (F-3 sync). *Queue works offline and batches; payload/limits need aligning; `StickerStorage` likely dropped (D3)*
+- [ ] 🟡 `QuestService.today()` and `ProfileModel` (stats, streak, sticker list, weekly activity) feeding Jonathan's views (Q-11, P-3, P-5). *Working against the mock; response shapes need aligning*
+- [x] *(extra)* Xcode app project with FogKit linked, permissions, temporary dev test screen
 
 #### Jonathan: Front-end design, quest experience, Profile UI & sign-in
 - [ ] Hour 3: `Theme` (colours, fonts, spacing, radii) + placeholder components on `main`; low-fi mockups of Map tab, quest sheet, recap card, Profile (§10.8)

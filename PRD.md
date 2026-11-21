@@ -358,13 +358,68 @@ All P0s in §8: F-1–F-5 · E-1–E-3 · Q-1–Q-9 · P-1–P-3 · D-1–D-6
 ### Polish (once the P0 flow works end to end)
 F-6, F-7 (fog animation and soft edges) · Q-10 (sticker and Quest Reveal animations) · E-5 (story-format card) · Q-11 (found-today count) · then remaining P1s
 
-### Team split (4 people)
-| Person | Owns |
-|---|---|
-| A | Map + fog renderer + H3 tile clearing + fog animation |
-| B | Location pipeline + Simulator/joystick/GPX + expeditions & share card |
-| C | Quest flow: camera, subject lifting, Edge Function + vision verification, reveal animations |
-| D | Supabase schema/auth/sync, Profile tab (sticker book, path trace, stats), demo prep and pitch |
+### Team split
+
+| Member | Area | Requirements | Modules (§10.7) |
+|---|---|---|---|
+| **Ayman** | Map & fog | F-1, F-2, F-3 (local), F-5, F-6, F-7, Q-4, Q-9, Quest Reveal wave in Q-10 | `Map/`, `Exploration/` |
+| **Justin** | Location, expeditions & demo mode | F-4, F-8, E-1–E-5, P-4, D-1–D-6 | `Location/`, `Expedition/`, `Debug/` |
+| **Jonathan** | Quest capture & AI verification | Q-5, Q-6, Q-7, Q-8, sticker peel in Q-10, Q-12 | `Quest/` (client), `verify-quest` Edge Function |
+| **Vishaal** | Backend, quest data & Profile | F-3 (sync), Q-1, Q-2, Q-3, Q-11, Q-13, P-1, P-2, P-3, onboarding (§9) | `Backend/`, `Profile/`, `App/`, Supabase schema |
+
+#### Ayman: Map & fog
+- [ ] `FogMapView` (`UIViewRepresentable` around `MKMapView`), recentering, pan/zoom (F-1, F-5)
+- [ ] `FogOverlay` + `FogRenderer`: fog fill, hex holes with `CGBlendMode.clear`, partial invalidation (§10.2)
+- [ ] H3 integration and `TileMath`: point → cell, `gridDisk` for the 30 m vision radius (F-2)
+- [ ] `ExplorationStore`: in-memory set + SwiftData persistence, `clear(cells:)` API (F-3 local)
+- [ ] Low-zoom performance: coarse parent-cell drawing, 60 fps with 10k tiles (F-5)
+- [ ] Quest marker annotation that stays visible above the fog (Q-4)
+- [ ] Quest Reveal: clear 150 m around the target, with an expanding-wave animation (Q-9, Q-10)
+- [ ] Polish: fog dissolve on clear, drifting cloud texture, soft edges (F-6, F-7)
+
+#### Justin: Location, expeditions & demo mode
+- [ ] `LocationProvider` protocol + `RealLocationProvider` (`CLLocationUpdate.liveUpdates`)
+- [ ] `FixFilter` (accuracy/speed/dedupe) and the 10 m interpolator (F-4, F-8)
+- [ ] `ExpeditionManager`: Start/End, path, distance, duration, new tiles (E-1)
+- [ ] Background location during an active expedition (E-4)
+- [ ] Expedition recap card + `ImageRenderer`/`ShareLink`, 9:16 story layout (E-2, E-3, E-5)
+- [ ] Expedition history list in Profile (P-4)
+- [ ] Simulator Mode: hidden toggle, joystick, GPX Auto-Walk, Reset fog (D-1–D-6)
+- [ ] Record the demo GPX route on the Western campus and the backup demo video
+
+#### Jonathan: Quest capture & AI verification
+- [ ] Quest sheet UI: hint → camera → verifying → result
+- [ ] Geofence gate: camera unlocks within 40 m of the target (Q-5)
+- [ ] In-app camera (`AVCaptureSession`), no photo library access (Q-6)
+- [ ] `StickerExtractor` with `VNGenerateForegroundInstanceMaskRequest`, circular-crop fallback (Q-8)
+- [ ] `verify-quest` Edge Function: server-side 40 m check, attempt limit, vision model call, JSON parsing (Q-7, §10.5)
+- [ ] Prompt tuning against real photos and photos of screens; confidence threshold
+- [ ] Failed-verification retry UI showing the model's reason (Q-12)
+- [ ] Sticker "peel off" animation into the collection (Q-10)
+- [ ] On-device fallback (`VNClassifyImageRequest`) behind the debug toggle (§14)
+
+#### Vishaal: Backend, quest data & Profile
+- [ ] Supabase project: schema from §10.6, PostGIS, row-level security, Storage bucket for stickers
+- [ ] Sign in with Apple via Supabase Auth + onboarding/permission screens (§9)
+- [ ] `SupabaseClient` + `SyncQueue` for cleared tiles and expeditions (F-3 sync)
+- [ ] Hand-seed `daily_quests` for the Western campus area; `QuestService` fetch for the user's region (Q-1, Q-2, Q-3)
+- [ ] "N found today" aggregate view and its display on the quest card (Q-11)
+- [ ] Midnight reset and missed-day silhouettes (Q-13)
+- [ ] Profile tab: stats + streak, sticker book grid + detail, path-tracing map (P-1, P-2, P-3)
+- [ ] Seeded demo account; pitch slides
+
+#### Shared interfaces (agree in hours 0–3)
+| Interface | Owner | Used by |
+|---|---|---|
+| `LocationProvider` (async stream of `CLLocation`) | Justin | Ayman (clearing), Jonathan (geofence) |
+| `ExplorationStore.clear(cells:)` / `isCleared(_:)` / `clearedCells` | Ayman | Justin (expedition tile counts), Vishaal (sync, path trace), Jonathan (Quest Reveal trigger) |
+| `Quest` model + `QuestService.today()` | Vishaal | Jonathan (quest sheet), Ayman (marker) |
+| `QuestService.verify(photo:location:) -> VerificationResult` | Jonathan | Vishaal (completion record, streak) |
+| `Sticker` model + Storage upload | Vishaal | Jonathan (save), Profile (display) |
+
+Until an interface is real, each owner ships a mock version on `main` so nobody is blocked.
+
+Everyone rehearses the demo together during hours 32–36.
 
 ### Timeline
 | Hours | Milestone |

@@ -18,34 +18,43 @@ Only work that's been pushed to GitHub is counted.
 | Xcode app project (iOS 17+, iPhone portrait, permissions, background location) | Justin | ✅ | `main`: `FogOfWar/` |
 | FogKit package: location, simulator, expeditions, quest capture, networking (§13 Justin checklist) | Justin | ✅ mostly; API alignment pending | `main`: `Packages/FogKit/` |
 | Temporary dev test screen (map, joystick, quest, expedition, recap/share) | Justin | ✅ | `main`: `FogOfWar/FogOfWar/Dev/` |
-| API contract + mock responses | Vishaal | 🟡 written, not merged | branch `docs/v1-api-contract` |
-| Tiger Data schema + migrations (local TimescaleDB/PostGIS) | Vishaal | 🟡 written, not merged | branch `backend/v2-tiger-schema` |
-| Edge Functions, Supabase project, quest seeding | Vishaal | ⬜ | |
+| API contract + mock responses | Vishaal | ✅ (open decisions still to settle) | `main`: `docs/api.md`, `docs/mocks/` |
+| Tiger Data schema, migrations, local Docker DB, schema tests (21/21 pass) | Vishaal | ✅ locally; not yet applied to Tiger Cloud | `main`: `db/`, `scripts/db/`, `docs/backend.md` |
+| Edge Functions, Supabase + Tiger Cloud setup, prompt tuning, quest + demo seeding | Justin (taken over from Vishaal) | ⬜ | |
+| Pitch | Vishaal | ⬜ | |
 | Fog renderer + H3 `ExplorationStore` | Ayman | ⬜ (branch `feature/ayman-map-fog` exists, no commits yet) | |
 | Design system, screens, `AuthService` | Jonathan | ⬜ nothing pushed yet | |
 
 **What works today:** run `FogOfWar/FogOfWar.xcodeproj` on the iPhone Simulator. The joystick moves you, tiles clear (shown as blue dots until Ayman's fog lands), expeditions track distance, tiles and time, the quest unlocks within 40 m, a photo "verifies" against the mock backend and becomes a sticker, and the recap card can be shared. Everything uses `MockFogAPI` and `GridExplorer` stand-ins.
 
 **Changed since the original plan:**
+- Vishaal hands over all remaining technical work to Justin and focuses on the pitch full-time (§13, §15).
 - Completing a quest no longer clears extra fog (Q-9 removed; §15).
 - Justin's code lives in a local Swift package (`Packages/FogKit`) that the app imports, not in app folders. Ayman implements the `ExplorationClearing` protocol instead of subscribing to location himself. See `Packages/FogKit/README.md`.
 
 ### Justin: what's next (in order)
 
-1. **Answer Vishaal's open decisions that affect you** (`docs/api.md` → Open decisions on his branch): D3 (server uploads stickers, so drop `StickerStorage`), D4, D6, D8, D12. **Also tell him to drop `reveal_radius_m` and the `reveal` object** from `quest-today` and `verify-quest`: the quest reveal was removed.
-2. **Align `FogNetworking` with `docs/api.md`** once it's merged. My provisional shapes in `APIModels.swift` differ in several places:
+1. **Get access from Vishaal:** has he created the Tiger Cloud service or Supabase project? If so, get access or the connection details (into `.env` only, never committed). If not, create them yourself (step 6).
+2. **Settle the open decisions in `docs/api.md`** (D1–D12; Justin now decides). Recommended: accept all as proposed. **Remove the quest reveal** from the contract and mocks (`reveal_radius_m` in `quest-today`, the `reveal` object in `verify-quest`).
+3. **Align `FogNetworking` with `docs/api.md`.** My provisional shapes in `APIModels.swift` differ in several places:
    - coordinates are `{ "lat", "lng" }`, not `{ "latitude", "longitude" }`
    - `sync`: pings use `ts` (with milliseconds) / `lat` / `lng` / `accuracy_m` / `speed_mps`; tiles use `h3`; expeditions have no route segments (the server builds routes from pings) and must be sent with any batch containing their pings; limits are 5000 tiles / 2000 pings / 50 expeditions
    - `quest-today`: new wrapper (`status`, `found_today`, `completed_by_me`, `attempts_left`, `resets_at`); the quest has `place_name`, `geofence_radius_m`, no `title`
-   - `verify-quest`: request sends `lat`, `lng`, `accuracy_m`, `photo_jpeg_base64` **and** `sticker_png_base64` (≤ 512 px); response has `attempts_left`, `completion.sticker_url`, `streak`; the client must **not** re-check confidence
+   - `verify-quest`: request sends `lat`, `lng`, `accuracy_m`, `photo_jpeg_base64` **and** `sticker_png_base64` (≤ 512 px); response has `attempts_left`, `completion.sticker_url`, `streak`; the client must **not** re-check confidence. Drop `StickerStorage` (D3: the server uploads)
    - error envelope: map `too_far`, `already_completed`, `no_attempts_left`, `not_todays_quest` and `verifier_unavailable` (retry, doesn't use an attempt) to `QuestCaptureModel` states; on any 401, refresh the token and retry once
    - `profile`: new sticker shape, `missed_days`, `expeditions`, `routes`; add `POST profile` (username) for Jonathan's onboarding
    - use the files in `docs/mocks/` as test fixtures, and make `MockFogAPI` return them
-3. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
-4. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.
-5. **Test on a real iPhone:** walking GPS, background location with the screen locked, camera, Vision sticker cutout (doesn't run in the Simulator).
-6. **Swap in the real demo route** when Vishaal draws it (`Packages/FogKit/Sources/FogLocation/Resources/demo-route.gpx`).
-7. **Integrate teammates' pieces as they land:** Ayman's `ExplorationStore` and Jonathan's `AuthService` in `FogOfWarApp.swift`, then remove `Dev/` once Jonathan's screens cover the flow.
+4. **Write the Edge Functions** in `supabase/functions/` (TypeScript; install the CLI with `brew install supabase/tap/supabase`), test locally against the Docker database: `quest-today` → `sync` → `profile` (GET + POST) → `verify-quest`.
+5. **Write and tune the `verify-quest` prompt** (Claude vision) with a folder of test photos: real objects, photos of screens, wrong objects.
+6. **Cloud setup:** Tiger Cloud service (`npm run db:migrate:tiger`), Supabase project (anonymous sign-in, public `stickers` + private `quest-photos` buckets, secrets: Tiger URL, Anthropic key), deploy the functions, put the project URL + anon key in `FogOfWarApp.swift`.
+7. **Seed data:** hand-pick campus quest targets into `daily_quests`; seed the demo account (past expeditions, stickers, a streak).
+8. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
+9. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.
+10. **Test on a real iPhone:** walking GPS, background location with the screen locked, camera, Vision sticker cutout.
+11. **Draw the real demo route** in gpx.studio and replace `Packages/FogKit/Sources/FogLocation/Resources/demo-route.gpx`.
+12. **Integrate teammates' pieces as they land:** Ayman's `ExplorationStore` and Jonathan's `AuthService` in `FogOfWarApp.swift`, then remove `Dev/` once Jonathan's screens cover the flow.
+
+If this is too much for one person, the easiest pieces to hand off are step 7 (seeding) and step 10 (device testing).
 
 ## 1. Summary
 
@@ -463,14 +472,14 @@ F-6, F-7 (fog animation and soft edges) · Q-10 (sticker animation) · E-5 (stor
 
 ### Team split
 
-Vishaal doesn't have a Mac, so he owns everything that runs off-device (database, server functions, AI prompt, quest data) plus the pitch. All Swift/Xcode work is split across Ayman, Justin and Jonathan.
+Vishaal wrote the API contract and the Tiger Data schema, then handed all remaining technical work to Justin so he can focus on the pitch full-time. Justin now owns both sides of the API (app networking and the backend), which removes the main integration risk.
 
 | Member | Area | Requirements | Modules (§10.7) |
 |---|---|---|---|
 | **Ayman** | Map, fog & path tracing | F-1, F-2, F-3 (local), F-5, F-6, F-7, Q-4, P-2 | `Map/`, `Exploration/`, `Profile/PathTraceMapView` |
-| **Justin** | Location, expeditions, demo mode, quest capture & app networking | F-3 (sync client), F-4, F-8, E-1, E-3, E-4, D-1–D-6, Q-5 (logic), Q-6, Q-8, Q-11 (data) | `Location/`, `Expedition/` (logic), `Debug/`, `Quest/` (camera, sticker extraction, `QuestService`), `Backend/` (except `AuthService`) |
+| **Justin** | Location, expeditions, demo mode, quest capture, app networking **and backend** | F-3, F-4, F-8, E-1, E-3, E-4, D-1–D-6, Q-1, Q-2, Q-3, Q-5 (logic), Q-6, Q-7, Q-8, Q-11, Q-13 (backend), P-5 (data) | `Location/`, `Expedition/` (logic), `Debug/`, `Quest/` (camera, sticker extraction, `QuestService`), `Backend/` (except `AuthService`), `supabase/functions/`, `db/`, seeding |
 | **Jonathan** | Front-end design, quest experience, Profile UI & sign-in | Design system (§10.8), quest sheet UI, sticker peel in Q-10, Q-12, Q-13 (UI), E-2, E-5, P-1, P-3, P-4, P-5 (chart UI), onboarding + sign-in (§9) | `DesignSystem/`, `Quest/` (views & animations), `Expedition/ExpeditionCardView`, `Profile/` (except path trace), `Backend/AuthService`, `App/` |
-| **Vishaal** | Backend (Tiger Data + Supabase), AI verification, quest data & pitch | Q-1, Q-2, Q-3, Q-7, Q-11 (backend), Q-13 (backend), P-5 (data), server side of F-3 | Tiger Data schema, all Edge Functions (TypeScript), OSM seeding script, pitch |
+| **Vishaal** | Pitch (technical work handed to Justin) | — | Slides, script, Devpost, rehearsals |
 
 #### Ayman: Map, fog & path tracing
 - [ ] `FogMapView` (`UIViewRepresentable` around `MKMapView`), recentering, pan/zoom (F-1, F-5)
@@ -498,6 +507,18 @@ Vishaal doesn't have a Mac, so he owns everything that runs off-device (database
 - [ ] 🟡 `QuestService.today()` and `ProfileModel` (stats, streak, sticker list, weekly activity) feeding Jonathan's views (Q-11, P-3, P-5). *Working against the mock; response shapes need aligning*
 - [x] *(extra)* Xcode app project with FogKit linked, permissions, temporary dev test screen
 
+**Backend (taken over from Vishaal):**
+- [x] API contract in `docs/api.md` with mocks *(Vishaal)*. Open decisions D1–D12 still to settle; remove the quest reveal
+- [x] Tiger Data schema: PostGIS, `location_pings` + `quest_attempts` hypertables, continuous aggregates, columnstore policy, local Docker DB, schema tests *(Vishaal)*
+- [ ] Tiger Cloud service + apply migrations (`npm run db:migrate:tiger`)
+- [ ] Supabase project: anonymous sign-in, public `stickers` + private `quest-photos` buckets, Edge Function secrets
+- [ ] Edge Functions `sync`, `quest-today`, `profile` (GET + POST), each taking `user_id` from the verified JWT (§10.1)
+- [ ] `verify-quest` Edge Function: checks, geofence, attempt limit, Claude vision call, Storage upload on success (Q-7, §10.5)
+- [ ] Prompt tuning with a folder of test photos (real objects, photos of screens, wrong objects)
+- [ ] Hand-seed `daily_quests` for the campus area (OSM Overpass script optional) (Q-1, Q-2, Q-3)
+- [ ] Seed the demo account (past expeditions, stickers, a streak)
+- [ ] Draw the real demo route in gpx.studio for Auto-Walk
+
 #### Jonathan: Front-end design, quest experience, Profile UI & sign-in
 - [ ] Hour 3: `Theme` (colours, fonts, spacing, radii) + placeholder components on `main`; low-fi mockups of Map tab, quest sheet, recap card, Profile (§10.8)
 - [ ] `DesignSystem` components: `QuestCard`, `PrimaryButton`, `StickerTile`, `StatTile`, sheet styles
@@ -511,27 +532,20 @@ Vishaal doesn't have a Mac, so he owns everything that runs off-device (database
 - [ ] Onboarding and permission screens (§9)
 - [ ] App icon; design pass over every screen in the demo flow before feature freeze
 
-#### Vishaal: Backend, AI verification, quest data & pitch
-No Mac needed: everything below runs in a browser, a terminal, or Deno/TypeScript on any OS.
+#### Vishaal: Pitch
+Technical work so far (merged to `main`): API contract + mocks (`docs/api.md`), Tiger Data schema + migrations + tests (`db/`, `scripts/db/`, `docs/backend.md`). Everything else technical is now Justin's.
 
-- [ ] **Hour 3: API contract** in `docs/api.md`: request/response JSON examples for `sync`, `quest-today`, `verify-quest`, `profile`, so Justin can build `APIClient` against mocks
-- [ ] Tiger Cloud service: schema from §10.6, PostGIS, `location_pings` hypertable, continuous aggregates, compression policy
-- [ ] Supabase project: anonymous sign-in enabled, Storage bucket for stickers, Tiger connection string in Edge Function secrets
-- [ ] Edge Functions `sync`, `quest-today`, `profile` (TypeScript), each taking `user_id` from the verified JWT (§10.1)
-- [ ] `verify-quest` Edge Function: server-side 40 m check, attempt limit, vision model call, JSON parsing (Q-7, §10.5)
-- [ ] Prompt tuning with `curl` and a folder of test photos (real objects, photos of screens, wrong objects); pick the confidence threshold
-- [ ] OSM Overpass script to load benches/lamps/trees/etc. for the campus area; hand-seed `daily_quests` (Q-1, Q-2, Q-3)
-- [ ] "N found today", streak, midnight reset and weekly activity queries for the `profile` and `quest-today` responses (Q-11, Q-13, P-5)
-- [ ] Seed the demo account's data (past expeditions, stickers, a streak) directly in Tiger Data
-- [ ] Draw the demo route in a web GPX editor (e.g. gpx.studio) for Justin's Auto-Walk
-- [ ] **Pitch (from hour 24):** slides, 3-minute script, Tiger Data prize talking points, Devpost write-up, coordinate the backup demo video, run rehearsals
-
-Vishaal tests his work without the app: `curl` against the Edge Functions and SQL queries in the Tiger console. From hour 18 he joins integration testing by watching the data land in Tiger Data while someone else runs the app.
+- [ ] **Handover:** tell Justin whether a Tiger Cloud service or Supabase project already exists, and share access (connection strings via a private channel, never in the repo)
+- [ ] Pick the demo-day quest object to bring on stage (D11, e.g. a potted plant as a `tree`)
+- [ ] Slides and 3-minute script (follow the demo script in §13)
+- [ ] Tiger Data prize talking points: hypertables for GPS pings, continuous aggregates for stats and "found today", columnstore compression
+- [ ] Devpost write-up
+- [ ] Coordinate the backup demo video and run rehearsals
 
 #### Shared interfaces (agree in hours 0–3)
 | Interface | Owner | Used by |
 |---|---|---|
-| API contract (`docs/api.md`) | Vishaal | Justin (`APIClient`) |
+| API contract (`docs/api.md`) | Justin (written by Vishaal) | Justin (`APIClient`), Jonathan (error codes, username rules) |
 | `LocationProvider` (async stream of `CLLocation`) | Justin | Ayman (clearing), Justin (quest geofence) |
 | `ExplorationStore.clear(cells:)` / `isCleared(_:)` / `clearedCells` | Ayman | Justin (expedition tile counts, sync) |
 | `Quest` model + `QuestService.today()` | Justin | Jonathan (quest sheet), Ayman (marker) |
@@ -545,7 +559,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 
 #### Integration rules
 - **Xcode project:** create it with Xcode 16 and keep its default folder setup (folders sync automatically), so adding files doesn't edit the shared `project.pbxproj`. One person creates the full folder structure from §10.7 in hour 0.
-- **Edge Functions live in the repo** under `supabase/functions/`, so Vishaal's backend code goes through the same PRs as the app.
+- **Edge Functions live in the repo** under `supabase/functions/`, so backend code goes through the same PRs as the app.
 - **Small PRs, merged to `main` several times a day.** No branch lives longer than about half a day.
 - **`main` must always build.** Pull before starting work; fix a broken build before anything else.
 - **Hour 18 is the first end-to-end run**, ugly or not: joystick → fog clears → quest → verify → sticker → recap card.
@@ -554,11 +568,11 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 ### Timeline
 | Hours | Milestone |
 |---|---|
-| 0–3 | Xcode project, Tiger Cloud service, Supabase project, H3 package compiling, module skeleton on `main`; API contract (Vishaal) and `Theme` + mockups (Jonathan) |
+| 0–3 | Xcode project, Tiger Cloud service, Supabase project, H3 package compiling, module skeleton on `main`; API contract (Vishaal, done) and `Theme` + mockups (Jonathan) |
 | 3–10 | Static fog over MapKit with holes from a hardcoded tile set; joystick moving a dot; camera + subject lift working standalone |
 | 10–18 | End-to-end clearing (location → tiles → fog); verification Edge Function returning JSON; auth + sync |
 | 18–24 | Quest geofence + sticker; Profile sticker book + path trace; expedition card + share. **Full P0 flow works end to end.** |
-| 24–32 | Polish only: fog animation, reveal animations, card design, empty states, app icon. No new features. Vishaal switches to the pitch |
+| 24–32 | Polish only: fog animation, reveal animations, card design, empty states, app icon. No new features. Vishaal is on the pitch full-time |
 | 32–36 | Feature freeze. Record a backup demo video, rehearse the pitch (led by Vishaal), verify the seeded demo account |
 
 ### Demo script (3 min)
@@ -593,6 +607,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Vision radius | Fixed at 30 m | A growing radius would clear streets the user never walked |
 | Feature scope | Two core loops + expedition card + profile + demo mode; everything else cut | A polished core wins more than many half-working features |
 | Database | Tiger Data for all data; Supabase kept only for Auth, Storage and Edge Functions (Option A) | Tiger Data prize track. GPS history is time-series data, which fits Tiger well. Keeping Supabase avoids building our own auth, file storage and API server |
+| Technical ownership | Vishaal hands all remaining technical work (Edge Functions, cloud setup, prompt, seeding) to Justin and focuses on the pitch | Lets Vishaal focus on the pitch; one person owning both sides of the API removes the biggest integration risk. Vishaal's contract and schema were high quality and are kept as-is |
 | Sign-in | Supabase anonymous sign-in + username; no Sign in with Apple | Nobody on the team has a paid Apple Developer account, which Sign in with Apple requires |
 | Name | Keep "Fog of War IRL" for the hackathon | Says exactly what the app does in a 3-minute pitch |
 

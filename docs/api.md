@@ -1,6 +1,6 @@
 # Fog of War IRL: Backend API contract
 
-Owner: Vishaal · Client: Justin (`APIClient`) · Status: **v0.1 draft (2026-11-21)**
+Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.1 draft (2026-11-21)**
 
 Four Supabase Edge Functions in front of Tiger Data. The app talks only to these functions. It never talks to Tiger Data or Supabase Storage directly.
 Mock responses live in [`docs/mocks/`](mocks/), one file per response. Build against the mocks until the functions are live.

@@ -1,7 +1,7 @@
 # Backend: run, test, deploy
 
 Off-device half of Fog of War IRL: Tiger Data (Postgres + TimescaleDB + PostGIS) behind Supabase Edge Functions.
-API contract: [api.md](api.md). Owner: Vishaal.
+API contract: [api.md](api.md). Owner: Justin (written by Vishaal).
 
 ## Prerequisites
 - Node 22+ and npm

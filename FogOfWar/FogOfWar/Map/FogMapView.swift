@@ -12,7 +12,13 @@ struct FogMapView: UIViewRepresentable {
     let latestChange: ExplorationChange?
     let tileMath: TileMath
     var userCoordinate: CLLocationCoordinate2D?
+    /// When false, `userCoordinate` is still used for recentering / follow, but no
+    /// player annotation is drawn (profile path-trace).
+    var showsUserAnnotation: Bool = true
     var questMarker: QuestMarkerData?
+    /// Optional route polylines (active expedition or profile path tracing). Each
+    /// inner array is one continuous segment — never join across gaps.
+    var routeSegments: [[CLLocationCoordinate2D]] = []
     var recenterToken: Int
     var onMapTap: (CLLocationCoordinate2D) -> Void
     var onFollowingChanged: (Bool) -> Void
@@ -47,6 +53,8 @@ struct FogMapView: UIViewRepresentable {
         private var isFollowingUser = true
         private var questAnnotation: QuestAnnotation?
         private var playerAnnotation: PlayerAnnotation?
+        private var routeOverlays: [MKPolyline] = []
+        private var renderedRouteSegments: [[CLLocationCoordinate2D]] = []
         private weak var mapView: MKMapView?
 
         init(parent: FogMapView) {
@@ -99,6 +107,7 @@ struct FogMapView: UIViewRepresentable {
 
             mapView.addOverlay(overlay, level: .aboveLabels)
             updateAnnotations(on: mapView)
+            updateRouteOverlays(on: mapView)
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -110,6 +119,7 @@ struct FogMapView: UIViewRepresentable {
             parent = newParent
             updateExploration()
             updateAnnotations(on: mapView)
+            updateRouteOverlays(on: mapView)
 
             if newParent.recenterToken != lastRecenterToken {
                 lastRecenterToken = newParent.recenterToken
@@ -130,6 +140,11 @@ struct FogMapView: UIViewRepresentable {
             fogRenderer?.atmosphericMotionEnabled = false
             fogRenderer?.visibleMapRectProvider = nil
             mapView.delegate = nil
+            if !routeOverlays.isEmpty {
+                mapView.removeOverlays(routeOverlays)
+                routeOverlays.removeAll()
+                renderedRouteSegments.removeAll()
+            }
             mapView.removeOverlay(overlay)
             self.mapView = nil
         }
@@ -200,7 +215,7 @@ struct FogMapView: UIViewRepresentable {
                 self.questAnnotation = nil
             }
 
-            if let coordinate = parent.userCoordinate {
+            if parent.showsUserAnnotation, let coordinate = parent.userCoordinate {
                 if let playerAnnotation {
                     playerAnnotation.coordinate = coordinate
                 } else {
@@ -212,6 +227,41 @@ struct FogMapView: UIViewRepresentable {
                 mapView.removeAnnotation(playerAnnotation)
                 self.playerAnnotation = nil
             }
+        }
+
+        private func updateRouteOverlays(on mapView: MKMapView) {
+            let desired = parent.routeSegments.filter { $0.count >= 2 }
+            guard !Self.routeSegmentsEqual(renderedRouteSegments, desired) else { return }
+
+            if !routeOverlays.isEmpty {
+                mapView.removeOverlays(routeOverlays)
+                routeOverlays.removeAll(keepingCapacity: true)
+            }
+
+            let polylines = desired.map { MKPolyline(coordinates: $0, count: $0.count) }
+            routeOverlays = polylines
+            renderedRouteSegments = desired
+            if !polylines.isEmpty {
+                mapView.addOverlays(polylines, level: .aboveRoads)
+            }
+        }
+
+        private static func routeSegmentsEqual(
+            _ lhs: [[CLLocationCoordinate2D]],
+            _ rhs: [[CLLocationCoordinate2D]]
+        ) -> Bool {
+            guard lhs.count == rhs.count else { return false }
+            for (leftSegment, rightSegment) in zip(lhs, rhs) {
+                guard leftSegment.count == rightSegment.count else { return false }
+                for (left, right) in zip(leftSegment, rightSegment) {
+                    if abs(left.latitude - right.latitude) > 0.000_001
+                        || abs(left.longitude - right.longitude) > 0.000_001
+                    {
+                        return false
+                    }
+                }
+            }
+            return true
         }
 
         private func setFollowing(_ following: Bool) {
@@ -246,6 +296,15 @@ struct FogMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let polyline = overlay as? MKPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+                renderer.strokeColor = UIColor(red: 1.0, green: 0.55, blue: 0.18, alpha: 0.92)
+                renderer.lineWidth = 4
+                renderer.lineCap = .round
+                renderer.lineJoin = .round
+                return renderer
+            }
+
             guard overlay === self.overlay else { return MKOverlayRenderer(overlay: overlay) }
 
             if let fogRenderer {

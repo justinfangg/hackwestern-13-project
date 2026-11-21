@@ -2,24 +2,26 @@
 //  DevHarnessView.swift
 //  FogOfWar
 //
-//  TEMPORARY developer test screen (Justin). Exercises FogKit end to end before the
-//  real fog map (Ayman) and designed screens (Jonathan) exist. Delete the Dev/ folder
-//  once the real screens cover this flow. Deliberately unstyled.
+//  TEMPORARY developer test screen (Justin). Exercises FogKit end to end.
+//  Map visualization now uses Ayman's atmospheric FogMapView + ExplorationStore
+//  instead of the temporary square-grid blue dots. Delete the Dev/ folder once
+//  Jonathan's designed screens cover this flow.
 //
 
+import CoreLocation
 import SwiftUI
-import MapKit
 import FogKit
 
 struct DevHarnessView: View {
     @Environment(FogServices.self) private var services
+    @Environment(ExplorationStore.self) private var explorationStore
     @State private var permissions = LocationPermissions()
     @State private var camera = CameraController()
     @State private var showDebug = false
     @State private var showCamera = false
-    @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
-        center: Coordinate.westernCampus.clCoordinate,
-        latitudinalMeters: 300, longitudinalMeters: 300))
+    @State private var tileMath = TileMath()
+    @State private var recenterToken = 0
+    @State private var isFollowingUser = true
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -33,9 +35,19 @@ struct DevHarnessView: View {
             .padding()
         }
         .overlay(alignment: .topTrailing) {
-            Button { showDebug = true } label: { Image(systemName: "ladybug").padding(10) }
+            HStack(spacing: 8) {
+                Button {
+                    recenterToken &+= 1
+                } label: {
+                    Image(systemName: isFollowingUser ? "location.fill" : "location")
+                        .padding(10)
+                }
                 .background(.thinMaterial, in: Circle())
-                .padding()
+
+                Button { showDebug = true } label: { Image(systemName: "ladybug").padding(10) }
+                    .background(.thinMaterial, in: Circle())
+            }
+            .padding()
         }
         .overlay(alignment: .leading) {
             if services.debug.isSimulatorEnabled {
@@ -71,34 +83,36 @@ struct DevHarnessView: View {
 
     // MARK: Map
 
-    private var explorer: GridExplorer? { services.pipeline.explorer as? GridExplorer }
+    private var questMarker: QuestMarkerData? {
+        guard let quest = services.quests.today else { return nil }
+        return QuestMarkerData(
+            id: quest.id.uuidString,
+            coordinate: quest.target.clCoordinate,
+            title: quest.title,
+            subtitle: quest.hint,
+            systemImageName: "star.fill"
+        )
+    }
+
+    private var activeRouteSegments: [[CLLocationCoordinate2D]] {
+        guard let segments = services.expeditions.active?.segments else { return [] }
+        return segments.map { $0.map(\.clCoordinate) }
+    }
 
     private var map: some View {
-        Map(position: $position) {
-            // Cleared tiles as dots (stand-in for Ayman's fog).
-            if let explorer {
-                ForEach(Array(explorer.cleared.prefix(3_000)), id: \.self) { tile in
-                    MapCircle(center: explorer.center(of: tile).clCoordinate, radius: 10)
-                        .foregroundStyle(.blue.opacity(0.25))
-                }
-            }
-            if let route = services.expeditions.active?.segments {
-                ForEach(route.indices, id: \.self) { i in
-                    MapPolyline(coordinates: route[i].map(\.clCoordinate)).stroke(.orange, lineWidth: 4)
-                }
-            }
-            if let quest = services.quests.today {
-                Marker(quest.title, systemImage: "star.fill", coordinate: quest.target.clCoordinate).tint(.purple)
-                MapCircle(center: quest.target.clCoordinate, radius: 40)
-                    .foregroundStyle(.purple.opacity(0.12))
-            }
-            if let me = services.location.displayCoordinate ?? services.location.currentCoordinate {
-                Annotation("You", coordinate: me.clCoordinate) {
-                    Circle().fill(.red).frame(width: 14, height: 14)
-                        .overlay(Circle().stroke(.white, lineWidth: 2))
-                }
-            }
-        }
+        FogMapView(
+            clearedCells: explorationStore.clearedCells,
+            latestChange: explorationStore.latestChange,
+            tileMath: tileMath,
+            userCoordinate: (services.location.displayCoordinate
+                             ?? services.location.currentCoordinate)?.clCoordinate,
+            questMarker: questMarker,
+            routeSegments: activeRouteSegments,
+            recenterToken: recenterToken,
+            onMapTap: { _ in },
+            onFollowingChanged: { isFollowingUser = $0 }
+        )
+        .ignoresSafeArea()
     }
 
     // MARK: Quest
@@ -126,6 +140,9 @@ struct DevHarnessView: View {
                     EmptyView()
                 }
             }
+            Text("Cleared cells: \(explorationStore.clearedCells.count)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

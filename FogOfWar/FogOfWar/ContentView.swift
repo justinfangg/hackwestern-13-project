@@ -3,6 +3,7 @@
 //  FogOfWar
 //
 
+import SwiftData
 import SwiftUI
 import FogKit
 
@@ -15,6 +16,13 @@ struct ContentView: View {
 }
 
 #Preview {
+    let container = try! ModelContainer(
+        for: ExploredCellRecord.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+    let store = ExplorationStore(modelContainer: container)
     ContentView()
-        .environment(FogServices(explorer: GridExplorer(), auth: nil, backend: nil))
+        .environment(FogServices(explorer: store, auth: nil, backend: nil))
+        .environment(store)
+        .modelContainer(container)
 }

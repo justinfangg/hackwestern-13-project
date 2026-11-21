@@ -22,6 +22,9 @@ public struct LocationStep: Sendable, Equatable {
 public final class LocationService {
     public private(set) var currentFix: LocationFix?
     public var currentCoordinate: Coordinate? { currentFix?.coordinate }
+    /// Latest position for drawing the user's dot. Updates on every usable fix, including small
+    /// moves the filter ignores for fog clearing, so the dot moves smoothly.
+    public private(set) var displayCoordinate: Coordinate?
     public private(set) var isRunning = false
     public private(set) var isSimulating = false
     /// Last rejection reason, for the debug overlay.
@@ -106,7 +109,12 @@ public final class LocationService {
     /// Feed a fix directly (used by tests and by providers).
     public func handle(_ fix: LocationFix) {
         let previous = filter.lastAccepted
-        switch filter.evaluate(fix) {
+        let decision = filter.evaluate(fix)
+        switch decision {
+        case .accept, .reject(.tooClose): displayCoordinate = fix.coordinate
+        default: break // inaccurate, out of order, or a jump: don't draw it
+        }
+        switch decision {
         case .reject(let reason):
             lastRejection = reason
         case .accept(let newSegment):

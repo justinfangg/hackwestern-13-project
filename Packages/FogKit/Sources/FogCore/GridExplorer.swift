@@ -1,12 +1,14 @@
 import Foundation
+import Observation
 
 /// Square-grid stand-in for Ayman's H3 `ExplorationStore`.
 /// Used by tests, previews, and as the PRD §14 fallback if the H3 package won't build.
 /// Cells are ~20 m × 20 m; IDs pack (latIndex, lngIndex) into a UInt64.
 @MainActor
+@Observable
 public final class GridExplorer: ExplorationClearing {
-    public let cellSize: Double
-    public let visionRadius: Double
+    @ObservationIgnored public let cellSize: Double
+    @ObservationIgnored public let visionRadius: Double
     public private(set) var cleared: Set<TileID> = []
 
     public init(cellSize: Double = 20, visionRadius: Double = 30) {
@@ -20,6 +22,7 @@ public final class GridExplorer: ExplorationClearing {
         return newly
     }
 
+    /// Clears every tile within `radiusMeters` of `center`.
     public func clearArea(center: Coordinate, radiusMeters: Double) -> [TileID] {
         clear(center: center, radius: radiusMeters)
     }

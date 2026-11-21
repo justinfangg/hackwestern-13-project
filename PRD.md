@@ -68,7 +68,6 @@ Rule for the team: if a task isn't on the in-scope list, it waits until the core
 | **Expedition Card** | Strava-style shareable recap image of an expedition. |
 | **Daily Quest** | One object-at-a-location challenge per region per day. |
 | **Region** | Area that shares a Daily Quest. H3 resolution 7 cell (~5 km², about 1–2 km across), so the quest is always walkable. |
-| **Quest Reveal** | Completing the Daily Quest clears all fog within 150 m of the quest target. |
 | **Sticker** | Object cut out of a verified quest photo and saved to the user's collection. |
 | **Streak** | Number of consecutive days the user has completed the Daily Quest. |
 
@@ -83,7 +82,7 @@ Rule for the team: if a task isn't on the in-scope list, it waits until the core
 - As a user, I see today's quest object and its location on the map.
 - As a user, when I'm close to the quest location, I can open the in-app camera and photograph the object.
 - As a user, the app tells me within a few seconds whether the photo was verified.
-- As a user, once verified, I see the object "peel off" into a sticker, and a large patch of fog around the quest spot clears.
+- As a user, once verified, I see the object "peel off" into a sticker in my collection.
 - As a user, I can see how many others completed today's quest in my area.
 
 ### Profile
@@ -132,8 +131,8 @@ Priority: **P0** = must ship · **P1** = polish, done once all P0s work end to e
 | Q-6 | In-app camera only, no photo library uploads (basic anti-cheat) | P0 |
 | Q-7 | Photo is sent to an AI vision model that returns `{verified: bool, confidence, reason}` for "does this photo contain a real <object>?" | P0 |
 | Q-8 | On success, the object is cut out of the photo (subject lifting) into a transparent-background sticker | P0 |
-| Q-9 | On success, all fog within 150 m of the quest target clears (Quest Reveal) | P0 |
-| Q-10 | Sticker animates into the collection ("peel off" effect) and the Quest Reveal plays as an expanding wave of cleared fog | P1 |
+| Q-9 | *Removed:* completing a quest does not clear extra fog. Fog only clears where the user has walked | n/a |
+| Q-10 | Sticker animates into the collection ("peel off" effect) | P1 |
 | Q-11 | Show a count of "N explorers found today's quest" for the Region | P1 |
 | Q-12 | Retry allowed on a failed verification, with the model's reason shown (max 5 attempts/day) | P1 |
 | Q-13 | Quest resets at local midnight; missed days show as greyed-out silhouettes in the sticker book | P1 |
@@ -169,7 +168,7 @@ TabView
 │   ├── Fog map + user avatar + quest marker
 │   ├── Top: quest card ("🪑 Find the bench • 420 m • 8 found today")
 │   ├── Bottom: Start/End Expedition button
-│   ├── Quest sheet: hint → Camera (unlocks at 40 m) → Verifying… → Sticker reveal → Quest Reveal
+│   ├── Quest sheet: hint → Camera (unlocks at 40 m) → Verifying… → Sticker reveal
 │   └── Expedition recap card → Share
 └── Profile
     ├── Avatar, lifetime stats, streak
@@ -273,7 +272,6 @@ LocationProvider (protocol)
 
 - Offline-first: SwiftData is the source of truth on device. Sync is upsert-only (cleared tiles never un-clear, so there are no conflicts).
 - Batching keeps the number of Edge Function calls (and database connections) low; see §14.
-- The Quest Reveal (Q-9) goes through the same `ExplorationStore` with a larger disk (`gridDisk` sized to 150 m).
 
 ### 10.4 Daily Quest Generation
 
@@ -313,7 +311,7 @@ verified && confidence ≥ 0.7 → store sticker PNG in Supabase Storage,
                                insert `quest_completions` in Tiger Data
    │
    ▼
-Client plays sticker reveal animation, then Quest Reveal (150 m fog clear)
+Client plays sticker reveal animation
 ```
 
 - If the subject mask fails (busy scene), fall back to a circular crop of the centre.
@@ -403,7 +401,7 @@ UI design is owned by **Jonathan** and built in parallel with feature logic, so 
 ## 12. Success Metrics
 
 **Hackathon demo**
-- The full demo runs without real GPS: joystick clears fog, reach the quest, photo verifies, sticker appears, Quest Reveal clears the area, expedition card is shared.
+- The full demo runs without real GPS: joystick clears fog, reach the quest, photo verifies, sticker appears, expedition card is shared.
 - Verification works on a real prop on stage in < 4 s.
 - No visible jank, placeholder UI, or debug text in the demo flow.
 
@@ -419,7 +417,7 @@ UI design is owned by **Jonathan** and built in parallel with feature logic, so 
 All P0s in §8: F-1–F-5 · E-1–E-3 · Q-1–Q-9 · P-1–P-3 · D-1–D-6
 
 ### Polish (once the P0 flow works end to end)
-F-6, F-7 (fog animation and soft edges) · Q-10 (sticker and Quest Reveal animations) · E-5 (story-format card) · Q-11 (found-today count) · P-5 (weekly activity chart, for the Tiger Data prize) · then remaining P1s
+F-6, F-7 (fog animation and soft edges) · Q-10 (sticker animation) · E-5 (story-format card) · Q-11 (found-today count) · P-5 (weekly activity chart, for the Tiger Data prize) · then remaining P1s
 
 ### Team split
 
@@ -427,7 +425,7 @@ Vishaal doesn't have a Mac, so he owns everything that runs off-device (database
 
 | Member | Area | Requirements | Modules (§10.7) |
 |---|---|---|---|
-| **Ayman** | Map, fog & path tracing | F-1, F-2, F-3 (local), F-5, F-6, F-7, Q-4, Q-9, Quest Reveal wave in Q-10, P-2 | `Map/`, `Exploration/`, `Profile/PathTraceMapView` |
+| **Ayman** | Map, fog & path tracing | F-1, F-2, F-3 (local), F-5, F-6, F-7, Q-4, P-2 | `Map/`, `Exploration/`, `Profile/PathTraceMapView` |
 | **Justin** | Location, expeditions, demo mode, quest capture & app networking | F-3 (sync client), F-4, F-8, E-1, E-3, E-4, D-1–D-6, Q-5 (logic), Q-6, Q-8, Q-11 (data) | `Location/`, `Expedition/` (logic), `Debug/`, `Quest/` (camera, sticker extraction, `QuestService`), `Backend/` (except `AuthService`) |
 | **Jonathan** | Front-end design, quest experience, Profile UI & sign-in | Design system (§10.8), quest sheet UI, sticker peel in Q-10, Q-12, Q-13 (UI), E-2, E-5, P-1, P-3, P-4, P-5 (chart UI), onboarding + sign-in (§9) | `DesignSystem/`, `Quest/` (views & animations), `Expedition/ExpeditionCardView`, `Profile/` (except path trace), `Backend/AuthService`, `App/` |
 | **Vishaal** | Backend (Tiger Data + Supabase), AI verification, quest data & pitch | Q-1, Q-2, Q-3, Q-7, Q-11 (backend), Q-13 (backend), P-5 (data), server side of F-3 | Tiger Data schema, all Edge Functions (TypeScript), OSM seeding script, pitch |
@@ -439,7 +437,6 @@ Vishaal doesn't have a Mac, so he owns everything that runs off-device (database
 - [ ] `ExplorationStore`: in-memory set + SwiftData persistence, `clear(cells:)` API (F-3 local)
 - [ ] Low-zoom performance: coarse parent-cell drawing, 60 fps with 10k tiles (F-5)
 - [ ] Quest marker annotation that stays visible above the fog (Q-4)
-- [ ] Quest Reveal: clear 150 m around the target, with an expanding-wave animation (Q-9, Q-10)
 - [ ] Path-tracing map in Profile: all routes drawn over the cleared area, reusing the fog renderer (P-2)
 - [ ] Polish: fog dissolve on clear, drifting cloud texture, soft edges (F-6, F-7)
 
@@ -493,7 +490,7 @@ Vishaal tests his work without the app: `curl` against the Edge Functions and SQ
 |---|---|---|
 | API contract (`docs/api.md`) | Vishaal | Justin (`APIClient`) |
 | `LocationProvider` (async stream of `CLLocation`) | Justin | Ayman (clearing), Justin (quest geofence) |
-| `ExplorationStore.clear(cells:)` / `isCleared(_:)` / `clearedCells` | Ayman | Justin (expedition tile counts, sync, Quest Reveal trigger) |
+| `ExplorationStore.clear(cells:)` / `isCleared(_:)` / `clearedCells` | Ayman | Justin (expedition tile counts, sync) |
 | `Quest` model + `QuestService.today()` | Justin | Jonathan (quest sheet), Ayman (marker) |
 | `QuestCaptureModel` (state, `canCapture`, `capture()`, `VerificationResult`) | Justin | Jonathan (quest sheet UI) |
 | `ExpeditionSummary` (route, distance, time, new tiles, sticker) | Justin | Jonathan (recap card) |
@@ -517,7 +514,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | 0–3 | Xcode project, Tiger Cloud service, Supabase project, H3 package compiling, module skeleton on `main`; API contract (Vishaal) and `Theme` + mockups (Jonathan) |
 | 3–10 | Static fog over MapKit with holes from a hardcoded tile set; joystick moving a dot; camera + subject lift working standalone |
 | 10–18 | End-to-end clearing (location → tiles → fog); verification Edge Function returning JSON; auth + sync |
-| 18–24 | Quest geofence + Quest Reveal; Profile sticker book + path trace; expedition card + share. **Full P0 flow works end to end.** |
+| 18–24 | Quest geofence + sticker; Profile sticker book + path trace; expedition card + share. **Full P0 flow works end to end.** |
 | 24–32 | Polish only: fog animation, reveal animations, card design, empty states, app icon. No new features. Vishaal switches to the pitch |
 | 32–36 | Feature freeze. Record a backup demo video, rehearse the pitch (led by Vishaal), verify the seeded demo account |
 
@@ -525,7 +522,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 1. Open the app: campus under fog. "This is your city before you've explored it."
 2. Joystick-walk down a street; fog dissolves live.
 3. Today's quest: "Find the bench. 8 explorers found it today." Walk to the marker; the camera unlocks.
-4. Photograph a real object on stage; AI verifies; the sticker peels off and a wave of fog clears around the quest spot.
+4. Photograph a real object on stage; AI verifies; the sticker peels off into the sticker book.
 5. End the expedition; show the expedition card; share it.
 6. Open Profile: sticker book, path tracing, streak.
 
@@ -548,7 +545,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Question | Decision | Reason |
 |---|---|---|
 | Region size for shared quests | H3 res 7 (~5 km², 1–2 km across). Later, size by player density | The quest must be a 10–15 minute walk or people skip it |
-| Quest reward | Sticker + clear all fog within 150 m of the target + streak | Ties the two loops together: quests are the fastest way to uncover the map |
+| Quest reward | Sticker + streak. Completing a quest does **not** clear extra fog (changed 2026-11-21; was a 150 m reveal) | Fog should only show where the user has actually been |
 | Seeing other players | Hackathon: anonymous "N found today" count only. No live positions ever | Community signal without stalking risk |
 | Vision radius | Fixed at 30 m | A growing radius would clear streets the user never walked |
 | Feature scope | Two core loops + expedition card + profile + demo mode; everything else cut | A polished core wins more than many half-working features |

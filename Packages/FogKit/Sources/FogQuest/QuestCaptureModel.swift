@@ -43,7 +43,7 @@ public final class QuestCaptureModel {
     /// Minimum model confidence to accept (PRD §10.5).
     public var minimumConfidence: Double = 0.7
 
-    /// Called once per successful find (FogKit wires this to Quest Reveal, expedition, sync).
+    /// Called once per successful find (FogKit wires this to the expedition, quest count and profile).
     @ObservationIgnored public var onSuccess: ((Sticker, Quest) -> Void)?
 
     @ObservationIgnored public var verifier: QuestVerifying

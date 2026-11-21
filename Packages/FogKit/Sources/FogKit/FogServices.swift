@@ -112,7 +112,6 @@ public final class FogServices {
         }
 
         questCapture.onSuccess = { sticker, quest in
-            pipeline.questReveal(at: quest.target)   // PRD Q-9
             expeditions.attach(sticker)
             quests.recordOwnFind()
             profile.addLocalSticker(sticker)

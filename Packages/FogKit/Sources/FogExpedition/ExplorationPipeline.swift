@@ -30,13 +30,4 @@ public final class ExplorationPipeline {
         if !newly.isEmpty { onTilesCleared?(newly) }
         onPing?(LocationPing(expeditionID: expeditions.active?.id, fix: step.fix))
     }
-
-    /// Quest Reveal (PRD Q-9): clear everything within `radius` of the quest target.
-    @discardableResult
-    public func questReveal(at target: Coordinate, radius: Double = 150) -> [TileID] {
-        let newly = explorer.clearArea(center: target, radiusMeters: radius)
-        expeditions.addTiles(newly.count)
-        if !newly.isEmpty { onTilesCleared?(newly) }
-        return newly
-    }
 }

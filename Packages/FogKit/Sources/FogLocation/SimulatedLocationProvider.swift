@@ -21,7 +21,7 @@ public final class SimulatedLocationProvider: LocationProvider {
     /// Speed multiplier for the joystick boost and Auto-Walk (PRD D-2: 5x).
     public var boost: Double = 1
     /// How often fixes are emitted.
-    public var tickInterval: TimeInterval = 0.5
+    public var tickInterval: TimeInterval = 0.25
 
     /// Joystick vector, x = east, y = north, each in -1...1.
     @ObservationIgnored private var stick: (x: Double, y: Double) = (0, 0)

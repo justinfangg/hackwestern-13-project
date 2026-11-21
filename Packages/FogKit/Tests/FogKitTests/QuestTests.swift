@@ -115,14 +115,14 @@ import Testing
             services.location.handle(fix(Geo.offset(start, north: Double(i) * 10, east: 0), at: t0 + Double(i) * 7))
         }
         #expect(services.questCapture.state == .ready)
-        let tilesBeforeReveal = explorer.cleared.count
+        let tilesBeforeCapture = explorer.cleared.count
 
-        // Capture → mock verification succeeds → Quest Reveal clears 150 m, sticker attached.
+        // Capture → mock verification succeeds → sticker attached. No extra fog clears at the quest.
         await services.questCapture.capture(solidImage())
         guard case .success = services.questCapture.state else {
             Issue.record("state \(services.questCapture.state)"); return
         }
-        #expect(explorer.cleared.count > tilesBeforeReveal + 100)
+        #expect(explorer.cleared.count == tilesBeforeCapture)
         #expect(services.profile.stickers.count == 1)
         #expect(services.quests.today?.foundTodayCount == quest.foundTodayCount + 1)
 

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PLACEHOLDER demo route near University College, Western University.
+     Not snapped to real paths. Replace with the route Vishaal draws in gpx.studio
+     (export as GPX track, keep the filename demo-route.gpx). -->
+<gpx version="1.1" creator="FogKit placeholder" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Demo route (placeholder)</name><trkseg>
+    <trkpt lat="43.00960" lon="-81.27370"/>
+    <trkpt lat="43.01000" lon="-81.27330"/>
+    <trkpt lat="43.01050" lon="-81.27310"/>
+    <trkpt lat="43.01080" lon="-81.27250"/>
+    <trkpt lat="43.01060" lon="-81.27170"/>
+    <trkpt lat="43.01010" lon="-81.27140"/>
+    <trkpt lat="43.00960" lon="-81.27180"/>
+    <trkpt lat="43.00930" lon="-81.27260"/>
+    <trkpt lat="43.00960" lon="-81.27370"/>
+  </trkseg></trk>
+</gpx>

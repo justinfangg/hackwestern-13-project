@@ -1,0 +1,12 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "lat and lng are required query parameters.",
+    "details": {
+      "fields": [
+        "lat",
+        "lng"
+      ]
+    }
+  }
+}

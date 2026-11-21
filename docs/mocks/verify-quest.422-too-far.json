@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "too_far",
+    "message": "You need to be within 40 m of the quest. You're 87 m away.",
+    "details": {
+      "distance_m": 87.2,
+      "radius_m": 40
+    }
+  }
+}

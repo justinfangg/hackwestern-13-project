@@ -373,8 +373,20 @@ FogOfWar/
 ├── Profile/          ProfileView.swift, StickerBookView.swift, PathTraceMapView.swift
 ├── Backend/          AuthService.swift (Supabase Auth), APIClient.swift (Edge Functions),
 │                     StickerStorage.swift (Supabase Storage), SyncQueue.swift
-└── Debug/            JoystickView.swift, GPXPlayer.swift, DebugMenu.swift
+├── Debug/            JoystickView.swift, GPXPlayer.swift, DebugMenu.swift
+└── DesignSystem/     Theme.swift (colours, fonts, spacing, radii), Components/
+                      (QuestCard, PrimaryButton, StickerTile, StatTile, Sheet styles)
 ```
+
+### 10.8 Design System & UI Workflow
+
+UI design is owned by **Jonathan** and built in parallel with feature logic, so no one waits on designs.
+
+- **Logic and views are separate.** Every screen has an `@Observable` view model owned by the feature owner. Views only read view-model state and call its methods, so restyling never touches logic.
+- **Feature owners ship plain screens first**: stock SwiftUI controls wired to the real view model. Jonathan then reskins them with `DesignSystem` components, or the owner swaps them in.
+- **`DesignSystem/` is the only place for visual constants.** No hardcoded colours, fonts or paddings in feature views; use `Theme`.
+- **Fog art direction:** the fog's look is drawn inside Ayman's renderer, so Jonathan provides colours, a mockup and edge-style references, and Ayman implements it.
+- **Hour 3 deliverable from Jonathan:** first version of `Theme` + placeholder components on `main`, plus low-fi mockups of the Map tab, quest sheet, recap card and Profile so everyone builds toward the same layout.
 
 ## 11. Non-Functional Requirements
 
@@ -414,9 +426,9 @@ F-6, F-7 (fog animation and soft edges) · Q-10 (sticker and Quest Reveal animat
 | Member | Area | Requirements | Modules (§10.7) |
 |---|---|---|---|
 | **Ayman** | Map & fog | F-1, F-2, F-3 (local), F-5, F-6, F-7, Q-4, Q-9, Quest Reveal wave in Q-10 | `Map/`, `Exploration/` |
-| **Justin** | Location, expeditions, path tracing & demo mode | F-4, F-8, E-1–E-5, P-2, P-4, D-1–D-6 | `Location/`, `Expedition/`, `Debug/` |
-| **Jonathan** | Quest capture & AI verification | Q-5, Q-6, Q-7, Q-8, sticker peel in Q-10, Q-12 | `Quest/` (client), `verify-quest` Edge Function |
-| **Vishaal** | Backend (Tiger Data + Supabase), quest data & Profile | F-3 (sync), Q-1, Q-2, Q-3, Q-11, Q-13, P-1, P-3, P-5, onboarding (§9) | `Backend/`, `Profile/`, `App/`, Tiger Data schema, Edge Functions except `verify-quest` |
+| **Justin** | Location, expeditions, demo mode & quest capture/verification | F-4, F-8, E-1, E-3, E-4, P-2, D-1–D-6, Q-5 (logic), Q-6, Q-7, Q-8 | `Location/`, `Expedition/` (logic), `Debug/`, `Quest/` (camera, sticker extraction, verification), `verify-quest` Edge Function |
+| **Jonathan** | Front-end design & quest experience | Design system (§10.8), quest sheet UI, sticker peel in Q-10, Q-12, E-2, E-5, P-1, P-4, onboarding screens | `DesignSystem/`, `Quest/` (views & animations), `Expedition/ExpeditionCardView`, `Profile/StickerBookView` |
+| **Vishaal** | Backend (Tiger Data + Supabase), quest data & Profile | F-3 (sync), Q-1, Q-2, Q-3, Q-11, Q-13, P-3, P-5, auth logic (§9) | `Backend/`, `Profile/`, `App/`, Tiger Data schema, Edge Functions except `verify-quest` |
 
 #### Ayman: Map & fog
 - [ ] `FogMapView` (`UIViewRepresentable` around `MKMapView`), recentering, pan/zoom (F-1, F-5)
@@ -428,52 +440,67 @@ F-6, F-7 (fog animation and soft edges) · Q-10 (sticker and Quest Reveal animat
 - [ ] Quest Reveal: clear 150 m around the target, with an expanding-wave animation (Q-9, Q-10)
 - [ ] Polish: fog dissolve on clear, drifting cloud texture, soft edges (F-6, F-7)
 
-#### Justin: Location, expeditions & demo mode
+#### Justin: Location, expeditions, demo mode & quest capture/verification
 - [ ] `LocationProvider` protocol + `RealLocationProvider` (`CLLocationUpdate.liveUpdates`)
 - [ ] `FixFilter` (accuracy/speed/dedupe) and the 10 m interpolator (F-4, F-8)
 - [ ] `ExpeditionManager`: Start/End, path, distance, duration, new tiles (E-1)
 - [ ] Background location during an active expedition (E-4)
-- [ ] Expedition recap card + `ImageRenderer`/`ShareLink`, 9:16 story layout (E-2, E-3, E-5)
-- [ ] Expedition history list in Profile (P-4)
+- [ ] Recap-card data (`ExpeditionSummary`) + `ImageRenderer`/`ShareLink` export of Jonathan's card view (E-3)
 - [ ] Simulator Mode: hidden toggle, joystick, GPX Auto-Walk, Reset fog (D-1–D-6)
 - [ ] Hand accepted fixes to `SyncQueue` as location pings, tagged with the expedition id
 - [ ] Path-tracing map in Profile, drawn from expedition routes (P-2)
 - [ ] Record the demo GPX route on the Western campus and the backup demo video
-
-#### Jonathan: Quest capture & AI verification
-- [ ] Quest sheet UI: hint → camera → verifying → result
-- [ ] Geofence gate: camera unlocks within 40 m of the target (Q-5)
+- [ ] `QuestCaptureModel`: geofence gate (within 40 m → `canCapture`), state machine idle → capturing → verifying → success/failure (Q-5)
 - [ ] In-app camera (`AVCaptureSession`), no photo library access (Q-6)
 - [ ] `StickerExtractor` with `VNGenerateForegroundInstanceMaskRequest`, circular-crop fallback (Q-8)
 - [ ] `verify-quest` Edge Function: server-side 40 m check, attempt limit, vision model call, JSON parsing (Q-7, §10.5)
 - [ ] Prompt tuning against real photos and photos of screens; confidence threshold
+- [ ] On-device fallback (`VNClassifyImageRequest`) behind the debug toggle (§14)
+
+#### Jonathan: Front-end design & quest experience
+- [ ] Hour 3: `Theme` (colours, fonts, spacing, radii) + placeholder components on `main`; low-fi mockups of Map tab, quest sheet, recap card, Profile (§10.8)
+- [ ] `DesignSystem` components: `QuestCard`, `PrimaryButton`, `StickerTile`, `StatTile`, sheet styles
+- [ ] Fog art direction for Ayman: colour, texture reference, edge style
+- [ ] Quest sheet UI on top of Justin's `QuestCaptureModel`: hint → camera → verifying → result
 - [ ] Failed-verification retry UI showing the model's reason (Q-12)
 - [ ] Sticker "peel off" animation into the collection (Q-10)
-- [ ] On-device fallback (`VNClassifyImageRequest`) behind the debug toggle (§14)
+- [ ] Expedition recap card design, 9:16 story layout (E-2, E-5)
+- [ ] Sticker book grid + sticker detail (P-1); expedition history list (P-4)
+- [ ] Onboarding and permission screens (§9), on top of Vishaal's auth logic
+- [ ] App icon; design pass over every screen in the demo flow before feature freeze
 
 #### Vishaal: Backend, quest data & Profile
 - [ ] Tiger Cloud service: schema from §10.6, PostGIS, `location_pings` hypertable, continuous aggregates, compression policy
 - [ ] Supabase project (Auth + Storage + Edge Functions only); Tiger connection string in Edge Function secrets
 - [ ] Edge Functions `sync`, `quest-today`, `profile`, each taking `user_id` from the verified JWT (§10.1)
-- [ ] Sign in with Apple via Supabase Auth + onboarding/permission screens (§9)
+- [ ] Sign in with Apple via Supabase Auth; permission-request logic for onboarding (§9)
 - [ ] `AuthService`, `APIClient`, `StickerStorage`, `SyncQueue` (F-3 sync)
 - [ ] Hand-seed `daily_quests` for the Western campus area; `QuestService` fetch for the user's region (Q-1, Q-2, Q-3)
 - [ ] "N found today" aggregate view and its display on the quest card (Q-11)
 - [ ] Midnight reset and missed-day silhouettes (Q-13)
-- [ ] Profile tab: stats + streak, sticker book grid + detail (P-1, P-3)
+- [ ] Profile tab shell + `ProfileModel` (stats, streak, sticker list) feeding Jonathan's sticker book; stats display (P-3)
 - [ ] Weekly activity chart from continuous aggregates (P-5); this is the Tiger Data showcase in the pitch
 - [ ] Seeded demo account; pitch slides
 
 #### Shared interfaces (agree in hours 0–3)
 | Interface | Owner | Used by |
 |---|---|---|
-| `LocationProvider` (async stream of `CLLocation`) | Justin | Ayman (clearing), Jonathan (geofence) |
-| `ExplorationStore.clear(cells:)` / `isCleared(_:)` / `clearedCells` | Ayman | Justin (expedition tile counts), Vishaal (sync), Jonathan (Quest Reveal trigger) |
+| `LocationProvider` (async stream of `CLLocation`) | Justin | Ayman (clearing), Justin (quest geofence) |
+| `ExplorationStore.clear(cells:)` / `isCleared(_:)` / `clearedCells` | Ayman | Justin (expedition tile counts), Vishaal (sync), Justin (Quest Reveal trigger on verification success) |
 | `Quest` model + `QuestService.today()` | Vishaal | Jonathan (quest sheet), Ayman (marker) |
-| `QuestService.verify(photo:location:) -> VerificationResult` | Jonathan | Vishaal (completion record, streak) |
-| `APIClient` (Edge Function calls) + `Sticker` model + `StickerStorage` upload | Vishaal | Jonathan (save), Profile (display) |
+| `QuestCaptureModel` (state, `canCapture`, `capture()`, `VerificationResult`) | Justin | Jonathan (quest sheet UI), Vishaal (completion record, streak) |
+| `ExpeditionSummary` (route, distance, time, new tiles, sticker) | Justin | Jonathan (recap card) |
+| `Theme` + `DesignSystem` components | Jonathan | Everyone |
+| `APIClient` (Edge Function calls) + `Sticker` model + `StickerStorage` upload | Vishaal | Justin (sticker upload), Jonathan (sticker book) |
 
 Until an interface is real, each owner ships a mock version on `main` so nobody is blocked.
+
+#### Integration rules
+- **Xcode project:** create it with Xcode 16 and keep its default folder setup (folders sync automatically), so adding files doesn't edit the shared `project.pbxproj`. One person creates the full folder structure from §10.7 in hour 0.
+- **Small PRs, merged to `main` several times a day.** No branch lives longer than about half a day.
+- **`main` must always build.** Pull before starting work; fix a broken build before anything else.
+- **Hour 18 is the first end-to-end run**, ugly or not: joystick → fog clears → quest → verify → sticker → recap card.
+- **Simulator Mode first:** Justin ships the joystick by hour 10 so everyone can test their feature without walking outside.
 
 Everyone rehearses the demo together during hours 32–36.
 

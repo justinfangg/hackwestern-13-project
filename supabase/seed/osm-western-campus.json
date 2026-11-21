@@ -1,0 +1,1336 @@
+{
+ "source": "OpenStreetMap contributors (ODbL), via Overpass API, fetched 2026-11-21",
+ "bbox": [
+  43.004,
+  -81.283,
+  43.014,
+  -81.265
+ ],
+ "elements": [
+  {
+   "type": "node",
+   "id": 4740790499,
+   "lat": 43.0086756,
+   "lon": -81.2655178,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4740790500,
+   "lat": 43.0085471,
+   "lon": -81.2659148,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4980245865,
+   "lat": 43.0076398,
+   "lon": -81.2701569,
+   "tags": {
+    "natural": "tree",
+    "leaf_type": "broadleaved"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4980587447,
+   "lat": 43.0079822,
+   "lon": -81.2663864,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4980623118,
+   "lat": 43.0072678,
+   "lon": -81.2745291,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4980648743,
+   "lat": 43.0094342,
+   "lon": -81.2797682,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981032069,
+   "lat": 43.0043254,
+   "lon": -81.2684935,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981107484,
+   "lat": 43.0074337,
+   "lon": -81.2806434,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981117220,
+   "lat": 43.0126884,
+   "lon": -81.2764954,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981118358,
+   "lat": 43.0088049,
+   "lon": -81.2694052,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981158146,
+   "lat": 43.0134186,
+   "lon": -81.2651315,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981159701,
+   "lat": 43.0077569,
+   "lon": -81.2746408,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981308913,
+   "lat": 43.0088019,
+   "lon": -81.2774477,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981477051,
+   "lat": 43.0074975,
+   "lon": -81.2701573,
+   "tags": {
+    "natural": "tree",
+    "leaf_type": "broadleaved"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981530372,
+   "lat": 43.0065204,
+   "lon": -81.2717182,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981871103,
+   "lat": 43.007555,
+   "lon": -81.270154,
+   "tags": {
+    "natural": "tree",
+    "leaf_type": "needleleaved"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981889593,
+   "lat": 43.0098798,
+   "lon": -81.2745661,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981914729,
+   "lat": 43.0111572,
+   "lon": -81.2797555,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981914960,
+   "lat": 43.008503,
+   "lon": -81.2714784,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4981915519,
+   "lat": 43.0072336,
+   "lon": -81.2747648,
+   "tags": {
+    "natural": "tree"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358276,
+   "lat": 43.013736,
+   "lon": -81.2729019,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358277,
+   "lat": 43.0136537,
+   "lon": -81.273205,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358278,
+   "lat": 43.0138939,
+   "lon": -81.273327,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358279,
+   "lat": 43.0139773,
+   "lon": -81.2730186,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358311,
+   "lat": 43.0132972,
+   "lon": -81.2749182,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358312,
+   "lat": 43.0132443,
+   "lon": -81.275108,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358313,
+   "lat": 43.0131884,
+   "lon": -81.2752958,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358314,
+   "lat": 43.0133198,
+   "lon": -81.2752743,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358315,
+   "lat": 43.0132604,
+   "lon": -81.2754795,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358316,
+   "lat": 43.0133962,
+   "lon": -81.2755519,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358317,
+   "lat": 43.0135183,
+   "lon": -81.2756176,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358318,
+   "lat": 43.0134575,
+   "lon": -81.2753461,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358319,
+   "lat": 43.0133781,
+   "lon": -81.2750798,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123358320,
+   "lat": 43.0135227,
+   "lon": -81.2751496,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359021,
+   "lat": 43.013435,
+   "lon": -81.2748539,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359022,
+   "lat": 43.0135742,
+   "lon": -81.2749223,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359023,
+   "lat": 43.0136948,
+   "lon": -81.2749833,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359024,
+   "lat": 43.013638,
+   "lon": -81.2751885,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359025,
+   "lat": 43.0135762,
+   "lon": -81.2754064,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359026,
+   "lat": 43.0136943,
+   "lon": -81.2754668,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359027,
+   "lat": 43.0137586,
+   "lon": -81.2752522,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359028,
+   "lat": 43.0138145,
+   "lon": -81.275051,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359029,
+   "lat": 43.0138988,
+   "lon": -81.2753246,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359030,
+   "lat": 43.013837,
+   "lon": -81.2755419,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5123359031,
+   "lat": 43.0139537,
+   "lon": -81.2751214,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5262398403,
+   "lat": 43.0063192,
+   "lon": -81.2748607,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5262398404,
+   "lat": 43.0063062,
+   "lon": -81.2750761,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5262398412,
+   "lat": 43.0065626,
+   "lon": -81.2751725,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5262398413,
+   "lat": 43.0063341,
+   "lon": -81.2754202,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5262398414,
+   "lat": 43.0060875,
+   "lon": -81.2754181,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5262398415,
+   "lat": 43.0060808,
+   "lon": -81.2751918,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5262398416,
+   "lat": 43.0059216,
+   "lon": -81.2753281,
+   "tags": {
+    "amenity": "post_box"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5262403346,
+   "lat": 43.007978,
+   "lon": -81.2653258,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5268669369,
+   "lat": 43.0076432,
+   "lon": -81.2663621,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5276574128,
+   "lat": 43.0078797,
+   "lon": -81.2656709,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5276574129,
+   "lat": 43.0080729,
+   "lon": -81.2650112,
+   "tags": {
+    "highway": "street_lamp"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5417333362,
+   "lat": 43.0076204,
+   "lon": -81.2746934,
+   "tags": {
+    "amenity": "bench",
+    "backrest": "yes"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5417333375,
+   "lat": 43.0087714,
+   "lon": -81.2746596,
+   "tags": {
+    "amenity": "bench",
+    "backrest": "yes"
+   }
+  },
+  {
+   "type": "node",
+   "id": 5429999307,
+   "lat": 43.0108872,
+   "lon": -81.2730293,
+   "tags": {
+    "amenity": "bench",
+    "backrest": "yes"
+   }
+  },
+  {
+   "type": "node",
+   "id": 6015244848,
+   "lat": 43.0095031,
+   "lon": -81.2782519,
+   "tags": {
+    "amenity": "bench",
+    "backrest": "yes",
+    "material": "metal"
+   }
+  },
+  {
+   "type": "node",
+   "id": 6015244849,
+   "lat": 43.0095266,
+   "lon": -81.2782231,
+   "tags": {
+    "amenity": "bench",
+    "backrest": "yes",
+    "material": "metal"
+   }
+  },
+  {
+   "type": "node",
+   "id": 6015244850,
+   "lat": 43.0095014,
+   "lon": -81.2781832,
+   "tags": {
+    "amenity": "bench",
+    "backrest": "yes",
+    "material": "metal"
+   }
+  },
+  {
+   "type": "way",
+   "id": 116779542,
+   "lat": 43.0105771,
+   "lon": -81.2731287,
+   "tags": {
+    "building": "university",
+    "name": "Natural Sciences Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 116779543,
+   "lat": 43.0073837,
+   "lon": -81.2706194,
+   "tags": {
+    "building": "university",
+    "name": "Talbot College"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764089,
+   "lat": 43.010271,
+   "lon": -81.271462,
+   "tags": {
+    "building": "university",
+    "name": "Collip Medical Research Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764090,
+   "lat": 43.0040427,
+   "lon": -81.2757788,
+   "tags": {
+    "building": "university",
+    "name": "Boundary Layer Wind Tunnel Laboratory"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764092,
+   "lat": 43.0086169,
+   "lon": -81.2732649,
+   "tags": {
+    "building": "university",
+    "name": "University College"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764093,
+   "lat": 43.0099328,
+   "lon": -81.2714649,
+   "tags": {
+    "building": "university",
+    "name": "Western Science Centre"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764095,
+   "lat": 43.0068794,
+   "lon": -81.2743716,
+   "tags": {
+    "building": "university",
+    "name": "Thames Hall"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764097,
+   "lat": 43.0065861,
+   "lon": -81.2761034,
+   "tags": {
+    "building": "university",
+    "name": "Law School"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764098,
+   "lat": 43.0042534,
+   "lon": -81.2753344,
+   "tags": {
+    "building": "university",
+    "name": "Thompson Engineering Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764099,
+   "lat": 43.0093759,
+   "lon": -81.2703795,
+   "tags": {
+    "building": "university",
+    "name": "Middlesex College"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764108,
+   "lat": 43.0077251,
+   "lon": -81.2756386,
+   "tags": {
+    "amenity": "library",
+    "building": "university",
+    "name": "Weldon Library"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764109,
+   "lat": 43.0084909,
+   "lon": -81.2741448,
+   "tags": {
+    "building": "university",
+    "name": "Stevenson Hall"
+   }
+  },
+  {
+   "type": "way",
+   "id": 118764110,
+   "lat": 43.0051817,
+   "lon": -81.2759052,
+   "tags": {
+    "building": "university",
+    "name": "Spencer Engineering Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668336,
+   "lat": 43.0087131,
+   "lon": -81.2783697,
+   "tags": {
+    "building": "university",
+    "name": "Huron University College"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668337,
+   "lat": 43.00748,
+   "lon": -81.2722671,
+   "tags": {
+    "building": "university",
+    "name": "International & Graduate Affairs"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668339,
+   "lat": 43.0122649,
+   "lon": -81.2797238,
+   "tags": {
+    "building": "yes",
+    "name": "Beaver Hall (Residence)"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668340,
+   "lat": 43.0120515,
+   "lon": -81.2802156,
+   "tags": {
+    "building": "yes",
+    "name": "Ausable Hall (Residence)"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668341,
+   "lat": 43.0134621,
+   "lon": -81.2776567,
+   "tags": {
+    "amenity": "university",
+    "building": "dormitory",
+    "name": "Lambton Hall (Residence)"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668347,
+   "lat": 43.0114836,
+   "lon": -81.2790744,
+   "tags": {
+    "amenity": "university",
+    "building": "dormitory",
+    "name": "Saugeen Maitland Hall (Residence)"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668520,
+   "lat": 43.0126599,
+   "lon": -81.2787827,
+   "tags": {
+    "amenity": "university",
+    "building": "dormitory",
+    "name": "Bayfield Hall (Residence)"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668525,
+   "lat": 43.0113712,
+   "lon": -81.2760334,
+   "tags": {
+    "building": "university",
+    "name": "West Valley Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668534,
+   "lat": 43.0075372,
+   "lon": -81.2781491,
+   "tags": {
+    "building": "yes",
+    "name": "Huron Dining Hall"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668540,
+   "lat": 43.0108047,
+   "lon": -81.2760986,
+   "tags": {
+    "building": "university",
+    "name": "Siebens Centre"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668543,
+   "lat": 43.0053537,
+   "lon": -81.272857,
+   "tags": {
+    "building": "university",
+    "name": "Health Sciences Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668547,
+   "lat": 43.0107908,
+   "lon": -81.2713191,
+   "tags": {
+    "building": "university",
+    "name": "Greenhouses"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668552,
+   "lat": 43.0055897,
+   "lon": -81.2752263,
+   "tags": {
+    "building": "yes",
+    "name": "Cronyn Observatory"
+   }
+  },
+  {
+   "type": "way",
+   "id": 126668554,
+   "lat": 43.011226,
+   "lon": -81.2718634,
+   "tags": {
+    "building": "university",
+    "name": "Biotron Experimental Climate Change Research Centre"
+   }
+  },
+  {
+   "type": "way",
+   "id": 141710478,
+   "lat": 43.0086515,
+   "lon": -81.268908,
+   "tags": {
+    "amenity": "university",
+    "building": "dormitory",
+    "name": "Delaware Hall (Residence)"
+   }
+  },
+  {
+   "type": "way",
+   "id": 141710480,
+   "lat": 43.0103336,
+   "lon": -81.2738231,
+   "tags": {
+    "building": "university",
+    "name": "Kresge Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 141710481,
+   "lat": 43.0094872,
+   "lon": -81.2734327,
+   "tags": {
+    "amenity": "arts_centre",
+    "building": "university",
+    "name": "McIntosh Art Gallery"
+   }
+  },
+  {
+   "type": "way",
+   "id": 141710482,
+   "lat": 43.0102484,
+   "lon": -81.2745742,
+   "tags": {
+    "building": "university",
+    "name": "Medical Sciences Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 141710483,
+   "lat": 43.0118428,
+   "lon": -81.2737216,
+   "tags": {
+    "amenity": "university",
+    "building": "yes",
+    "name": "Robarts Research Institute"
+   }
+  },
+  {
+   "type": "way",
+   "id": 141710484,
+   "lat": 43.0093173,
+   "lon": -81.2753362,
+   "tags": {
+    "building": "university",
+    "name": "Social Science Center"
+   }
+  },
+  {
+   "type": "way",
+   "id": 141710485,
+   "lat": 43.0110907,
+   "lon": -81.2733917,
+   "tags": {
+    "amenity": "library",
+    "building": "yes",
+    "name": "Taylor Library"
+   }
+  },
+  {
+   "type": "way",
+   "id": 141710486,
+   "lat": 43.0086815,
+   "lon": -81.2761665,
+   "tags": {
+    "building": "university",
+    "name": "University Community Center"
+   }
+  },
+  {
+   "type": "way",
+   "id": 142216959,
+   "lat": 43.0059429,
+   "lon": -81.2745484,
+   "tags": {
+    "building": "university",
+    "name": "Alumni Hall"
+   }
+  },
+  {
+   "type": "way",
+   "id": 142216964,
+   "lat": 43.0076884,
+   "lon": -81.274102,
+   "tags": {
+    "building": "university",
+    "name": "Somerville House"
+   }
+  },
+  {
+   "type": "way",
+   "id": 142286099,
+   "lat": 43.0083058,
+   "lon": -81.2649481,
+   "tags": {
+    "amenity": "university",
+    "building": "dormitory",
+    "name": "Elgin Hall (Residence)"
+   }
+  },
+  {
+   "type": "way",
+   "id": 142286116,
+   "lat": 43.0104084,
+   "lon": -81.2693236,
+   "tags": {
+    "building": "university",
+    "name": "North Campus Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 142286122,
+   "lat": 43.009761,
+   "lon": -81.2726107,
+   "tags": {
+    "building": "university",
+    "name": "Physics Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 142286130,
+   "lat": 43.0096101,
+   "lon": -81.2688064,
+   "tags": {
+    "building": "university",
+    "name": "Staging Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 147379378,
+   "lat": 43.0042543,
+   "lon": -81.2828822,
+   "tags": {
+    "building": "university",
+    "name": "Brecsia University College"
+   }
+  },
+  {
+   "type": "way",
+   "id": 190852608,
+   "lat": 43.007244,
+   "lon": -81.2817495,
+   "tags": {
+    "building": "yes",
+    "name": "Young House"
+   }
+  },
+  {
+   "type": "way",
+   "id": 213344476,
+   "lat": 43.0059825,
+   "lon": -81.2737001,
+   "tags": {
+    "building": "yes",
+    "name": "Power Plant"
+   }
+  },
+  {
+   "type": "way",
+   "id": 237299189,
+   "lat": 43.0105483,
+   "lon": -81.2785437,
+   "tags": {
+    "building": "university",
+    "name": "Support Services Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 237299258,
+   "lat": 43.010117,
+   "lon": -81.2778239,
+   "tags": {
+    "amenity": "university",
+    "building": "dormitory",
+    "name": "Apps International House"
+   }
+  },
+  {
+   "type": "way",
+   "id": 237300020,
+   "lat": 43.0106531,
+   "lon": -81.2801846,
+   "tags": {
+    "building": "university",
+    "name": "Graphic Services"
+   }
+  },
+  {
+   "type": "way",
+   "id": 237300096,
+   "lat": 43.0103629,
+   "lon": -81.2800414,
+   "tags": {
+    "building": "university",
+    "name": "Advanced Facility for Avian Research"
+   }
+  },
+  {
+   "type": "way",
+   "id": 237302165,
+   "lat": 43.0089737,
+   "lon": -81.2738361,
+   "tags": {
+    "building": "university",
+    "name": "Lawson Hall"
+   }
+  },
+  {
+   "type": "way",
+   "id": 310131574,
+   "lat": 43.0082163,
+   "lon": -81.2766215,
+   "tags": {
+    "building": "university",
+    "name": "Western Student Services Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 310131575,
+   "lat": 43.0079073,
+   "lon": -81.2797585,
+   "tags": {
+    "amenity": "university",
+    "building": "dormitory",
+    "name": "South Hall"
+   }
+  },
+  {
+   "type": "way",
+   "id": 310131577,
+   "lat": 43.0082751,
+   "lon": -81.2795918,
+   "tags": {
+    "amenity": "university",
+    "building": "dormitory",
+    "name": "Hellmuth Hall"
+   }
+  },
+  {
+   "type": "way",
+   "id": 481134503,
+   "lat": 43.0127462,
+   "lon": -81.2656983,
+   "tags": {
+    "building": "apartments",
+    "name": "Luxe London",
+    "description": "London Student Housing"
+   }
+  },
+  {
+   "type": "way",
+   "id": 527547917,
+   "lat": 43.0117474,
+   "lon": -81.2710002,
+   "tags": {
+    "building": "yes",
+    "name": "Western Interdisciplinary Research Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 555604064,
+   "lat": 43.0111529,
+   "lon": -81.2724721,
+   "tags": {
+    "building": "university",
+    "name": "Material Sciences Addition"
+   }
+  },
+  {
+   "type": "way",
+   "id": 558927474,
+   "lat": 43.0060544,
+   "lon": -81.2725582,
+   "tags": {
+    "building": "university",
+    "name": "FIMS & Nursing Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 562894113,
+   "lat": 43.010032,
+   "lon": -81.274933,
+   "tags": {
+    "building": "university",
+    "name": "Dr. Don Rix Clinical Skills Learning Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 626520018,
+   "lat": 43.004231,
+   "lon": -81.2763062,
+   "tags": {
+    "building": "university",
+    "name": "Amit Chakma Engineering Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 631167535,
+   "lat": 43.0098564,
+   "lon": -81.2777763,
+   "tags": {
+    "building": "university",
+    "name": "Benson House"
+   }
+  },
+  {
+   "type": "way",
+   "id": 682172580,
+   "lat": 43.0110236,
+   "lon": -81.2747153,
+   "tags": {
+    "building": "university",
+    "name": "Dental Sciences Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 682172581,
+   "lat": 43.010886,
+   "lon": -81.273925,
+   "tags": {
+    "building": "university",
+    "name": "Health Sciences Addition"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1203774692,
+   "lat": 43.0073987,
+   "lon": -81.2728822,
+   "tags": {
+    "building": "university",
+    "name": "Arts & Humanities"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1203774693,
+   "lat": 43.007183,
+   "lon": -81.2740301,
+   "tags": {
+    "building": "university",
+    "name": "3M Centre"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1203780928,
+   "lat": 43.0049889,
+   "lon": -81.2754233,
+   "tags": {
+    "building": "university",
+    "name": "Claudette Mackay-Lassonde Pavilion"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1264685790,
+   "lat": 43.0067676,
+   "lon": -81.2710359,
+   "tags": {
+    "building": "university",
+    "name": "Music Building"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1300081894,
+   "lat": 43.007403,
+   "lon": -81.2762851,
+   "tags": {
+    "building": "university",
+    "name": "Ronald D. Schmeichel Building for Entrepreneurship and Innovation"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1346111803,
+   "lat": 43.0074733,
+   "lon": -81.2792019,
+   "tags": {
+    "amenity": "university",
+    "building": "Dormitory",
+    "name": "Burnlea Hall"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1346111804,
+   "lat": 43.0078723,
+   "lon": -81.2778148,
+   "tags": {
+    "building": "university",
+    "name": "The Frank Holmes Centre for Leadership, Ethics & Entrepreneurship"
+   }
+  },
+  {
+   "type": "relation",
+   "id": 7379137,
+   "lat": 43.0044251,
+   "lon": -81.2780397,
+   "tags": {
+    "building": "university",
+    "name": "Richard Ivey Building"
+   }
+  },
+  {
+   "type": "relation",
+   "id": 7379171,
+   "lat": 43.0074609,
+   "lon": -81.2649385,
+   "tags": {
+    "amenity": "university",
+    "building": "dormitory",
+    "name": "Sydenham Hall (Residence)"
+   }
+  },
+  {
+   "type": "relation",
+   "id": 7380709,
+   "lat": 43.0108658,
+   "lon": -81.2699156,
+   "tags": {
+    "building": "university",
+    "name": "John Labatt Visual Art Centre"
+   }
+  },
+  {
+   "type": "relation",
+   "id": 7932251,
+   "lat": 43.0107173,
+   "lon": -81.2721998,
+   "tags": {
+    "building": "university",
+    "name": "Biological & Geological Sciences"
+   }
+  },
+  {
+   "type": "relation",
+   "id": 7932252,
+   "lat": 43.0114246,
+   "lon": -81.2727612,
+   "tags": {
+    "building": "university",
+    "name": "Chemistry Building"
+   }
+  },
+  {
+   "type": "relation",
+   "id": 21469585,
+   "lat": 43.0142065,
+   "lon": -81.2809373,
+   "tags": {
+    "building": "office",
+    "name": "Mogenson Centre"
+   }
+  }
+ ]
+}

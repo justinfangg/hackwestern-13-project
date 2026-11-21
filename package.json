@@ -11,7 +11,8 @@
     "db:test": "node scripts/db/test-schema.mjs",
     "functions:serve": "supabase functions serve --env-file supabase/functions/.env",
     "functions:smoke": "node scripts/functions/smoke.mjs",
-    "functions:deploy": "supabase functions deploy"
+    "functions:deploy": "supabase functions deploy",
+    "db:seed-quests": "node scripts/db/seed-quests.mjs > supabase/seed/quests.sql && supabase db query --remote -f supabase/seed/quests.sql"
   },
   "engines": {
     "node": ">=22"

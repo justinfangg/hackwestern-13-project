@@ -21,7 +21,8 @@ Only work that's been pushed to GitHub is counted.
 | API contract + mock responses | Vishaal | ✅ (open decisions still to settle) | `main`: `docs/api.md`, `docs/mocks/` |
 | Database schema + schema tests (17/17 pass on Supabase Postgres) | Vishaal, moved to Supabase by Justin | ✅ pushed to the cloud project | `main`: `supabase/migrations/`, `scripts/db/`, `docs/backend.md` |
 | Supabase project `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1): anonymous sign-in, schema, `stickers` + `quest-photos` buckets, `GEMINI_API_KEY` secret | Justin | ✅ | `supabase/config.toml` |
-| Edge Functions, prompt tuning, quest + demo seeding | Justin (taken over from Vishaal) | ⬜ | |
+| Edge Functions (deployed), quest seeding | Justin | ✅ (Gemini unreliable) | `main`: `supabase/functions/`, `scripts/db/seed-quests.mjs` |
+| Prompt tuning, demo-account seeding | Justin | ⬜ | |
 | Pitch | Vishaal | ⬜ | |
 | Fog renderer + H3 `ExplorationStore` | Ayman | ⬜ (branch `feature/ayman-map-fog` exists, no commits yet) | |
 | Design system, screens, `AuthService` | Jonathan | ⬜ nothing pushed yet | |
@@ -40,10 +41,10 @@ Only work that's been pushed to GitHub is counted.
 1. ~~Create the Supabase project and Gemini key~~ ✅ Done; keys are in `.env` (never committed). Gemini works but is intermittently slow/overloaded (503s, 38–51 s responses): `verify-quest` must use low thinking, retries and a ~10 s cap.
 2. ~~Settle the open decisions in `docs/api.md` and remove the quest reveal~~ ✅ Done: D1–D12 accepted as proposed; `reveal_radius_m` and `reveal` removed from the contract and mocks (API v0.2).
 3. ~~Align `FogNetworking` with `docs/api.md`~~ ✅ Done: all request/response types match v0.2 and are tested against every file in `docs/mocks`; error codes map to quest states; 401 → refresh token and retry once; `StickerStorage` upload removed (D3); `POST profile` added. 57 FogKit tests pass.
-4. **Write the Edge Functions** in `supabase/functions/` (TypeScript; install the CLI with `brew install supabase/tap/supabase`), test locally against `supabase start`: `quest-today` → `sync` → `profile` (GET + POST) → `verify-quest`.
+4. ~~Write the Edge Functions~~ ✅ Done and deployed: `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST). Local smoke test 24/24 (`npm run functions:smoke`). **Blocked on Gemini reliability:** verification currently returns `verifier_unavailable`; switch model via the `GEMINI_MODEL` secret once one responds.
 5. **Write and tune the `verify-quest` prompt** (Gemini vision) with a folder of test photos: real objects, photos of screens, wrong objects.
 6. **Cloud setup:** ~~link, push migrations, buckets, Gemini secret~~ ✅ done. Remaining: deploy the functions, put the project URL + publishable key in `FogOfWarApp.swift`.
-7. **Seed data:** hand-pick campus quest targets into `daily_quests`; seed the demo account (past expeditions, stickers, a streak).
+7. **Seed data:** ✅ quests seeded from OpenStreetMap for 2026-11-21 → 27 (`npm run db:seed-quests`). Remaining: seed the demo account (past expeditions, stickers, a streak) and a hand-placed stage-demo quest (D11).
 8. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
 9. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.
 10. **Test on a real iPhone:** walking GPS, background location with the screen locked, camera, Vision sticker cutout.
@@ -505,10 +506,10 @@ Vishaal wrote the API contract and the database schema, then handed all remainin
 - [x] Database schema and schema tests *(Vishaal, written for Tiger Data)*
 - [x] Move the schema to Supabase Postgres: plain tables + views, row-level security, tests on Supabase's Postgres image *(Justin)*
 - [x] Supabase project: anonymous sign-in, push migrations, public `stickers` + private `quest-photos` buckets, `GEMINI_API_KEY` secret
-- [ ] Edge Functions `sync`, `quest-today`, `profile` (GET + POST), each taking `user_id` from the verified JWT (§10.1)
-- [ ] `verify-quest` Edge Function: checks, geofence, attempt limit, Gemini vision call, Storage upload on success (Q-7, §10.5)
+- [x] Edge Functions `sync`, `quest-today`, `profile` (GET + POST), each taking `user_id` from the verified JWT (§10.1)
+- [x] `verify-quest` Edge Function: checks, geofence, attempt limit, Gemini vision call, Storage upload on success (Q-7, §10.5). *Gemini itself is unreliable right now*
 - [ ] Prompt tuning with a folder of test photos (real objects, photos of screens, wrong objects)
-- [ ] Hand-seed `daily_quests` for the campus area (OSM Overpass script optional) (Q-1, Q-2, Q-3)
+- [x] Seed `daily_quests` for the campus area from OpenStreetMap (Q-1, Q-2, Q-3)
 - [ ] Seed the demo account (past expeditions, stickers, a streak)
 - [ ] Draw the real demo route in gpx.studio for Auto-Walk
 

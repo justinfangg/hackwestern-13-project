@@ -126,6 +126,60 @@ struct SocialPage: View {
     }
 }
 
+// MARK: - Edge fades
+
+/// The map page's top and bottom washes (Figma "StatusBarBg") in the page's own colour,
+/// with a light blur underneath so content dissolves rather than just tinting.
+/// Placed over the full-screen page (see `MainView`), measured from the screen edge.
+struct SocialEdgeFades: View {
+    let safeArea: EdgeInsets
+
+    var body: some View {
+        ZStack {
+            EdgeFade(edge: .top, height: safeArea.top + 28)
+                .frame(maxHeight: .infinity, alignment: .top)
+            // Two stacked, as on the map: a tall soft one and a short one at the edge.
+            EdgeFade(edge: .bottom, height: 111)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+            EdgeFade(edge: .bottom, height: 51)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct EdgeFade: View {
+    enum Edge { case top, bottom }
+    let edge: Edge
+    let height: CGFloat
+
+    var body: some View {
+        let toEdge: UnitPoint = edge == .top ? .top : .bottom
+        let away: UnitPoint = edge == .top ? .bottom : .top
+        let surface = SideQuestDesign.profileSurface
+        // Same stops as the map's bottom fade: clear → 42% at a third → solid at the edge.
+        let fade = LinearGradient(
+            stops: [
+                .init(color: surface.opacity(0), location: 0),
+                .init(color: surface.opacity(0.42), location: 0.322),
+                .init(color: surface, location: 1),
+            ],
+            startPoint: away,
+            endPoint: toEdge
+        )
+        let mask = LinearGradient(colors: [.clear, .black], startPoint: away, endPoint: toEdge)
+
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial).mask(mask)
+            fade
+        }
+        .frame(height: height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Post
 
 /// One post: author row, then the session infographic.

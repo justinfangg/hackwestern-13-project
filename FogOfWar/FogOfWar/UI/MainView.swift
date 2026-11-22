@@ -69,6 +69,8 @@ struct MainView: View {
             if visited.contains(.social) {
                 SocialPage(bottomInset: max(MainTabBar.reservedHeight - safeArea.bottom, 0) + 8)
                     .safeAreaPadding(safeArea)
+                    // Posts fade out under the status bar and tab bar, like the map page.
+                    .overlay { SocialEdgeFades(safeArea: safeArea) }
             } else {
                 SideQuestDesign.canvas
             }

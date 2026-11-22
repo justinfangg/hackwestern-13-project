@@ -57,7 +57,9 @@ struct MapPage: View {
             .sheet(isPresented: $showDebug) {
                 NavigationStack {
                     DebugMenuView(settings: services.debug, location: services.location,
-                                  onResetFog: services.resetFog)
+                                  onResetFog: services.resetFog,
+                                  userID: services.userID?.uuidString,
+                                  onRestoreFog: { Task { await services.restoreFog() } })
                         .navigationTitle("Debug")
                 }
             }

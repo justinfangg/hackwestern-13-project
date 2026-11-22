@@ -59,3 +59,17 @@ Daily quests come from real objects in OpenStreetMap (PRD §10.4), so the target
 - Seeded so far: 2026-11-21 to 2026-11-27. Re-run with `--start` for later dates.
 - For the stage demo (D11), insert a hand-placed quest at the venue for that day before seeding, and it won't be overwritten.
 
+
+## Demo account
+`npm run db:seed-demo -- --user <uuid> [--username name] --apply` gives one existing user two weeks of believable history for the stage demo:
+- 6 completed quests with sticker images (`supabase/seed/stickers/`, placeholder emoji art) ending yesterday, so a 4-day streak; a couple of rejected attempts first
+- 6 past expeditions (~7 km total) walked along real campus footpaths (`supabase/seed/osm-western-paths.json`), with GPS pings every ~8 m, cleared tiles, route lines and weekly activity
+- the account's start date backdated 14 days, so the sticker book shows missed days
+- quests for the past 14 days (same generator as `seed-quests`)
+
+Ids are derived from the user id and every insert is `on conflict do nothing`, so re-running is safe. Needs `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env` (stickers are uploaded with the secret key). Without `--apply` it only writes `supabase/seed/.demo.sql` (gitignored) for review.
+
+On the demo phone:
+1. Open the app once (creates the anonymous user), then Debug menu (triple-tap) → **Your user ID**: copy it.
+2. Run the seed with that id.
+3. Debug menu → **Restore fog from server**: the seeded fog appears immediately. Pull the profile to see stickers, streak and history.

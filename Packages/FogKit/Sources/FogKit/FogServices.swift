@@ -38,6 +38,8 @@ public final class FogServices {
     public let usingMockBackend: Bool
     /// Tiles restored from the server at launch (nil until a restore happened).
     public private(set) var restoredTileCount: Int?
+    /// The signed-in user's Supabase id, once the profile has loaded.
+    public var userID: UUID? { profile.remote?.userId }
 
     @ObservationIgnored private let remoteVerifier: QuestVerifying
     @ObservationIgnored private let onDeviceVerifier = OnDeviceQuestVerifier()
@@ -87,7 +89,7 @@ public final class FogServices {
         sync.startAutoSync()
         Task {
             await refreshQuest()
-            if needsRestore { await restoreFog() }
+            if needsRestore { await restoreFog() } else { await profile.refresh() }
         }
     }
 

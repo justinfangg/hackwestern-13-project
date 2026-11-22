@@ -44,8 +44,8 @@ Only work that's been pushed to GitHub is counted.
 4. ~~Write the Edge Functions~~ ✅ Done and deployed: `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST). Local smoke test 24/24 (`npm run functions:smoke`). **Blocked on Gemini reliability:** verification currently returns `verifier_unavailable`; switch model via the `GEMINI_MODEL` secret once one responds.
 5. **Write and tune the `verify-quest` prompt** (Gemini vision) with a folder of test photos: real objects, photos of screens, wrong objects.
 6. ~~Cloud setup~~ ✅ Done: migrations, buckets, Gemini secret, functions deployed; the app talks to the live project (`Config/SupabaseConfig.swift`) with FogKit's `SupabaseAnonymousAuth` (anonymous sign-in, Keychain session, token refresh). Verified on a clean Simulator install: real quest loads, tiles and pings sync.
-7. **Seed data:** ✅ quests seeded from OpenStreetMap for 2026-11-21 → 27 (`npm run db:seed-quests`). Remaining: seed the demo account (past expeditions, stickers, a streak) and a hand-placed stage-demo quest (D11).
-8. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
+7. **Seed data:** ✅ quests seeded from OpenStreetMap for 2026-11-21 → 27 (`npm run db:seed-quests`). ✅ Demo-account seed ready (`npm run db:seed-demo -- --user <id> --apply`; tested on a throwaway user, then removed). Remaining: run it for the real demo phone, and a hand-placed stage-demo quest (D11).
+8. ~~Restore fog after reinstall (D8)~~ ✅ Done: automatic on an empty device, plus Debug menu → Restore fog from server.
 9. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.
 10. **Test on a real iPhone:** walking GPS, background location with the screen locked, camera, Vision sticker cutout.
 11. **Draw the real demo route** in gpx.studio and replace `Packages/FogKit/Sources/FogLocation/Resources/demo-route.gpx`.
@@ -510,7 +510,7 @@ Vishaal wrote the API contract and the database schema, then handed all remainin
 - [x] `verify-quest` Edge Function: checks, geofence, attempt limit, Gemini vision call, Storage upload on success (Q-7, §10.5). *Gemini itself is unreliable right now*
 - [ ] Prompt tuning with a folder of test photos (real objects, photos of screens, wrong objects)
 - [x] Seed `daily_quests` for the campus area from OpenStreetMap (Q-1, Q-2, Q-3)
-- [ ] Seed the demo account (past expeditions, stickers, a streak)
+- [x] Demo-account seed script (past expeditions on real paths, stickers, streak, missed days); run it for the demo phone's user id
 - [ ] Draw the real demo route in gpx.studio for Auto-Walk
 
 #### Jonathan: Front-end design, quest experience, Profile UI & sign-in

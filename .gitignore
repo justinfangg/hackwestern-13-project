@@ -23,3 +23,6 @@ test-photos/
 
 # Windows
 Thumbs.db
+
+# Generated per-user demo seed (scripts/db/seed-demo.mjs)
+supabase/seed/.demo.sql

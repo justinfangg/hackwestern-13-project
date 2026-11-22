@@ -1,6 +1,6 @@
 # Fog of War IRL: Backend API contract
 
-Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.4 (2026-11-22): adds §7 territory leaderboard, §8 social feed**
+Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.5 (2026-11-22): §3 lists several quests a day; §7 territory leaderboard, §8 social feed**
 
 Six Supabase Edge Functions (sync, quest-today, verify-quest, profile, leaderboard, feed) in front of the Supabase Postgres database. The app talks only to these functions. It never reads or writes database tables or Supabase Storage directly (row-level security blocks it).
 Mock responses live in [`docs/mocks/`](mocks/), one file per response. Build against the mocks until the functions are live.
@@ -101,7 +101,7 @@ Response `200` ([mock](mocks/sync.200.json)):
 
 ## 3. `GET quest-today?lat=<lat>&lng=<lng>`
 
-Today's quest for the region (H3 res 7) that contains `lat,lng`. Call it on launch, when the app comes to the foreground, when you cross into a new region, and after `resets_at`.
+Today's quests for the region (H3 res 7) that contains `lat,lng`. A region can have several a day (`daily_quests.slot`); the player picks one in the Quests sheet, and `verify-quest` takes that quest's id. Attempts, completion and `found_today` are per quest. Call it on launch, when the app comes to the foreground, when you cross into a new region, and after `resets_at`.
 
 Response `200` ([mock](mocks/quest-today.200.json)):
 ```json
@@ -133,6 +133,7 @@ Response `200` ([mock](mocks/quest-today.200.json)):
 | `found_today` | Count of distinct users who completed this quest today. Only a count, never names |
 | `place_name` | Short label for the target, or `null` |
 | `attempts_left` | 5 minus today's attempts that reached the vision model. `0` when there's no quest |
+| `quests` | **Every** quest in the region today, first = `quest` ([mock](mocks/quest-today.200-multiple.json)). Each item is `{ quest, found_today, completed_by_me, attempts_left }` with the fields above, per quest. `[]` when there's none. The top-level `quest` / `found_today` / `completed_by_me` / `attempts_left` repeat the first item for older builds |
 
 "No quest" is a `200` with `quest: null`, never an error ([quiet hours](mocks/quest-today.200-quiet-hours.json), [none in region](mocks/quest-today.200-none-in-region.json)). Missing or invalid `lat`/`lng` → `400 invalid_request` ([mock](mocks/quest-today.400.json)).
 

@@ -265,3 +265,64 @@ import Testing
         #expect(services.restoredTileCount == 0)    // already on the device
     }
 }
+
+// MARK: - Several quests a day
+
+@Suite @MainActor struct MultipleQuestTests {
+    @Test func decodesEveryQuestAndFallsBackToOne() throws {
+        let multi = try JSONCoding.decoder.decode(QuestTodayResponse.self, from: mockData("quest-today.200-multiple.json"))
+        #expect(multi.appQuests.map(\.quest.category) == ["bench", "tree"])
+        #expect(multi.appQuests[1].completedByMe && multi.appQuests[1].attemptsLeft == 4)
+        #expect(multi.appQuests[1].quest.foundTodayCount == 3 && multi.appQuests[1].quest.placeName == "Weldon Library")
+        // Older servers send only `quest`.
+        let single = try JSONCoding.decoder.decode(QuestTodayResponse.self, from: mockData("quest-today.200.json"))
+        #expect(single.quests == nil && single.appQuests.count == 1 && single.appQuests[0].quest.foundTodayCount == 8)
+    }
+
+    @Test func picksTheFirstUnfinishedQuestAndKeepsTheChoice() async throws {
+        let first = Quest.sample, second = MockFogAPI.secondQuest(near: .sample)
+        let api = MockFogAPI(quest: first, extraQuests: [second], latency: .zero)
+        let service = QuestService(api: api)
+        await service.refresh(at: .westernCampus)
+        #expect(service.options.count == 2 && service.today?.id == first.id)
+
+        service.select(second.id)
+        #expect(service.today?.id == second.id && service.attemptsLeft == 5 && !service.completedByMe)
+        service.select(UUID())   // unknown id: ignored
+        #expect(service.today?.id == second.id)
+
+        await service.refresh(at: .westernCampus)   // a refresh keeps the player's pick
+        #expect(service.today?.id == second.id)
+
+        service.recordOwnFind()
+        #expect(service.completedByMe && service.options[1].quest.foundTodayCount == second.foundTodayCount + 1)
+        #expect(!service.options[0].completedByMe)
+    }
+
+    @Test func selectingAQuestRetargetsTheCapture() async throws {
+        let defaults = UserDefaults(suiteName: "FogKitTests-\(UUID())")!
+        let services = FogServices(explorer: GridExplorer(), auth: nil, backend: nil,
+                                   debug: DebugSettings(defaults: defaults), storageDirectory: tempDirectory(),
+                                   api: MockFogAPI(latency: .zero))
+        await services.refreshQuest()
+        let second = try #require(services.quests.options.last?.quest)
+        services.selectQuest(second.id)
+        #expect(services.questCapture.quest?.id == second.id && services.questCapture.state == .locked)
+
+        // Walk to the second quest and verify it: completes that one only.
+        services.expeditions.start(kind: .quest)
+        let start = Geo.offset(second.target, north: -60, east: 0)
+        let t0 = Date()
+        for i in 0...6 {
+            services.location.handle(fix(Geo.offset(start, north: Double(i) * 10, east: 0), at: t0 + Double(i) * 7))
+        }
+        #expect(services.questCapture.state == .ready)
+        await services.questCapture.capture(solidImage())
+        guard case .success = services.questCapture.state else {
+            Issue.record("state \(services.questCapture.state)"); return
+        }
+        await services.refreshQuest()
+        #expect(services.quests.options.map(\.completedByMe) == [false, true])
+        #expect(services.quests.today?.id == second.id)
+    }
+}

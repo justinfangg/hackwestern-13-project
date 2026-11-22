@@ -160,6 +160,8 @@ public final class LiveFogAPI: FogAPI {
 /// the real functions where it matters (attempt counting, already-completed, found-today).
 public actor MockFogAPI: FogAPI {
     public var quest: Quest?
+    /// More quests in the same region today (the real server can return several).
+    public var extraQuests: [Quest]
     /// Next verification outcome; nil = verified.
     public var nextVerification: VerifyQuestResponse?
     /// Next verification error (e.g. `verifier_unavailable`), checked before `nextVerification`.
@@ -169,19 +171,33 @@ public actor MockFogAPI: FogAPI {
     public private(set) var syncRequests: [SyncRequest] = []
     public private(set) var verifyRequests: [VerifyQuestRequest] = []
     public private(set) var username: String?
-    private var attemptsUsed = 0
-    private var completed = false
+    private var attempts: [UUID: Int] = [:]
+    private var completedIDs: Set<UUID> = []
     private var streak = 3
 
-    public init(quest: Quest? = .sample, latency: Duration = .milliseconds(300)) {
+    /// `extraQuests` defaults to one more quest ~250 m from `quest`.
+    public init(quest: Quest? = .sample, extraQuests: [Quest]? = nil, latency: Duration = .milliseconds(300)) {
         self.quest = quest
+        self.extraQuests = extraQuests ?? quest.map { [Self.secondQuest(near: $0)] } ?? []
         self.latency = latency
+    }
+
+    public static func secondQuest(near q: Quest) -> Quest {
+        Quest(id: UUID(uuidString: "00000000-0000-4000-8000-0000000000a2")!, date: q.date, category: "tree",
+              hint: "Find the big oak beside the library steps.", placeName: "Weldon Library",
+              target: Geo.offset(q.target, north: 180, east: -170), geofenceRadiusM: q.geofenceRadiusM,
+              foundTodayCount: 3)
     }
 
     public func setNextVerification(_ r: VerifyQuestResponse?) { nextVerification = r }
     public func setNextVerifyError(_ e: APIError?) { nextVerifyError = e }
     public func setFailSync(_ fail: Bool) { failSync = fail }
-    public func setQuest(_ q: Quest?) { quest = q; attemptsUsed = 0; completed = false }
+    public func setQuest(_ q: Quest?, extra: [Quest] = []) {
+        quest = q
+        extraQuests = extra
+        attempts = [:]
+        completedIDs = []
+    }
 
     public var syncedTiles: [TileClear] { syncRequests.flatMap(\.tiles) }
     public var syncedPings: [LocationPing] { syncRequests.flatMap(\.pings) }
@@ -201,34 +217,50 @@ public actor MockFogAPI: FogAPI {
             return QuestTodayResponse(date: "2026-11-21", regionH3: "872ab4634ffffff", status: .noneInRegion,
                                       resetsAt: midnight, quest: nil, foundToday: 0, completedByMe: false, attemptsLeft: 0)
         }
+        let entries = ([q] + extraQuests).map { q in
+            QuestTodayResponse.Entry(
+                quest: QuestDTO(id: q.id, category: q.category, hint: q.hint, placeName: q.placeName,
+                                target: q.target, geofenceRadiusM: q.geofenceRadiusM),
+                foundToday: q.foundTodayCount, completedByMe: completedIDs.contains(q.id),
+                attemptsLeft: max(0, 5 - attempts[q.id, default: 0]))
+        }
+        let first = entries[0]
         return QuestTodayResponse(
             date: q.date, regionH3: "872ab4634ffffff", status: .active, resetsAt: midnight,
-            quest: QuestDTO(id: q.id, category: q.category, hint: q.hint, placeName: q.placeName,
-                            target: q.target, geofenceRadiusM: q.geofenceRadiusM),
-            foundToday: q.foundTodayCount, completedByMe: completed, attemptsLeft: max(0, 5 - attemptsUsed))
+            quest: first.quest, foundToday: first.foundToday, completedByMe: first.completedByMe,
+            attemptsLeft: first.attemptsLeft, quests: entries)
+    }
+
+    private func bumpFound(_ id: UUID) {
+        if quest?.id == id { quest?.foundTodayCount += 1 }
+        if let i = extraQuests.firstIndex(where: { $0.id == id }) { extraQuests[i].foundTodayCount += 1 }
     }
 
     public func verifyQuest(_ request: VerifyQuestRequest) async throws -> VerifyQuestResponse {
         try await Task.sleep(for: latency * 3)
         verifyRequests.append(request)
-        if completed { throw Self.error(409, "already_completed", "You already completed this quest.") }
-        if attemptsUsed >= 5 { throw Self.error(429, "no_attempts_left", "You've used all 5 attempts today.") }
+        let id = request.questId
+        guard quest?.id == id || extraQuests.contains(where: { $0.id == id }) else {
+            throw Self.error(404, "quest_not_found", "That quest doesn't exist.")
+        }
+        if completedIDs.contains(id) { throw Self.error(409, "already_completed", "You already completed this quest.") }
+        if attempts[id, default: 0] >= 5 { throw Self.error(429, "no_attempts_left", "You've used all 5 attempts today.") }
         if let e = nextVerifyError { nextVerifyError = nil; throw e }   // doesn't use an attempt
-        attemptsUsed += 1
-        let left = 5 - attemptsUsed
+        attempts[id, default: 0] += 1
+        let left = 5 - attempts[id, default: 0]
         if var r = nextVerification {
             nextVerification = nil
             r.attemptsLeft = left
-            if r.verified { completed = true; quest?.foundTodayCount += 1 }
+            if r.verified { completedIDs.insert(id); bumpFound(id) }
             return r
         }
-        completed = true
-        streak += 1
-        quest?.foundTodayCount += 1
-        let id = UUID()
+        completedIDs.insert(id)
+        if completedIDs.count == 1 { streak += 1 }
+        bumpFound(id)
+        let completionID = UUID()
         return VerifyQuestResponse(
             verified: true, confidence: 0.93, reason: "A wooden park bench is clearly visible.", attemptsLeft: left,
-            completion: .init(id: id, stickerUrl: URL(string: "https://example.invalid/stickers/\(id).png")!,
+            completion: .init(id: completionID, stickerUrl: URL(string: "https://example.invalid/stickers/\(completionID).png")!,
                               completedAt: Date()),
             streak: streak)
     }

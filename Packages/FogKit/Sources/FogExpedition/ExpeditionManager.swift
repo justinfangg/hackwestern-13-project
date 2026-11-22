@@ -11,6 +11,7 @@ public final class ExpeditionManager {
     /// The expedition in progress, with live stats for the HUD.
     public struct Active: Equatable, Sendable {
         public var id: UUID
+        public var kind: ExpeditionKind
         public var startedAt: Date
         public var distanceMeters: Double = 0
         public var newTiles: Int = 0
@@ -34,9 +35,10 @@ public final class ExpeditionManager {
         self.clock = clock
     }
 
-    public func start() {
+    /// Starts recording. `.explore` is the free run from the Explore button (no quest target).
+    public func start(kind: ExpeditionKind = .quest) {
         guard active == nil else { return }
-        var a = Active(id: UUID(), startedAt: clock())
+        var a = Active(id: UUID(), kind: kind, startedAt: clock())
         if let here = location?.currentCoordinate { a.segments = [[here]] }
         active = a
         location?.start()
@@ -48,7 +50,7 @@ public final class ExpeditionManager {
         guard let a = active else { return nil }
         active = nil
         location?.setBackgroundUpdates(false)
-        let summary = ExpeditionSummary(id: a.id, startedAt: a.startedAt, endedAt: clock(),
+        let summary = ExpeditionSummary(id: a.id, kind: a.kind, startedAt: a.startedAt, endedAt: clock(),
                                         distanceMeters: a.distanceMeters, newTiles: a.newTiles,
                                         segments: a.segments.filter { !$0.isEmpty }, sticker: a.sticker)
         lastSummary = summary

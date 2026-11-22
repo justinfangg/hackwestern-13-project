@@ -249,7 +249,7 @@ struct RecapSheet: View {
 
     private var card: some View {
         VStack(spacing: 12) {
-            Text("Expedition complete").font(.title2.bold())
+            Text(summary.kind == .explore ? "Free run complete" : "Expedition complete").font(.title2.bold())
             Text("\(Int(summary.distanceMeters)) m walked")
             Text("\(summary.newTiles) new tiles")
             Text("\(Int(summary.duration / 60)) min")

@@ -2,21 +2,22 @@ import Foundation
 import Observation
 import FogCore
 
-/// Today's Daily Quest for the user's region (docs/api.md §3, PRD Q-1, Q-11, Q-13).
-/// Jonathan's quest card reads `today` / `status`; Ayman's map reads `today?.target` for the marker.
+/// Today's quests for the user's region (docs/api.md §3, PRD Q-1, Q-11, Q-13). A region can have
+/// several; the player picks one (`select`). `today` is the selected quest, which the capture flow,
+/// the active-quest card and the map's highlighted marker use. `options` lists them all.
 @MainActor
 @Observable
 public final class QuestService {
-    /// nil when there's no quest (`status` says why).
-    public private(set) var today: Quest?
+    /// Every quest in the region today, in server order. Empty when there's none (`status` says why).
+    public private(set) var options: [QuestOption] = []
+    /// The quest the player picked (defaults to the first one they haven't completed).
+    public private(set) var selectedID: UUID?
     public private(set) var status: QuestStatus?
     /// When `status == .quietHours`: when the next quest appears.
     public private(set) var availableAt: Date?
     /// Next local midnight; refetch after it.
     public private(set) var resetsAt: Date?
     public private(set) var regionH3: String?
-    public private(set) var completedByMe = false
-    public private(set) var attemptsLeft = 5
     public private(set) var isLoading = false
     public private(set) var lastError: String?
     public private(set) var fetchedAt: Date?
@@ -31,18 +32,31 @@ public final class QuestService {
         defer { isLoading = false }
         do {
             let r = try await api.questToday(at: location)
-            today = r.appQuest
+            options = r.appQuests
+            if !options.contains(where: { $0.id == selectedID }) {
+                selectedID = (options.first { !$0.completedByMe } ?? options.first)?.id
+            }
             status = r.status
             availableAt = r.availableAt
             resetsAt = r.resetsAt
             regionH3 = r.regionH3
-            completedByMe = r.completedByMe
-            attemptsLeft = r.attemptsLeft
             fetchedAt = Date()
             lastError = nil
         } catch {
             lastError = String(describing: error)
         }
+    }
+
+    /// The selected quest; nil when there's no quest (`status` says why).
+    public var today: Quest? { selected?.quest }
+    public var completedByMe: Bool { selected?.completedByMe ?? false }
+    public var attemptsLeft: Int { selected?.attemptsLeft ?? 5 }
+    public var selected: QuestOption? { options.first { $0.id == selectedID } }
+
+    /// Picks which of today's quests is active. Ignores ids that aren't in `options`.
+    public func select(_ id: UUID) {
+        guard options.contains(where: { $0.id == id }) else { return }
+        selectedID = id
     }
 
     /// True before the first fetch or once `resets_at` has passed.
@@ -53,7 +67,8 @@ public final class QuestService {
 
     /// Update after the user's own verified find, without waiting for a refetch.
     public func recordOwnFind() {
-        today?.foundTodayCount += 1
-        completedByMe = true
+        guard let i = options.firstIndex(where: { $0.id == selectedID }) else { return }
+        options[i].quest.foundTodayCount += 1
+        options[i].completedByMe = true
     }
 }

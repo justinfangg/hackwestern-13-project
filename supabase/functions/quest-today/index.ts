@@ -1,4 +1,6 @@
-// GET quest-today?lat=&lng= : today's quest for the H3 res 7 region containing lat,lng (docs/api.md §3).
+// GET quest-today?lat=&lng= : today's quests for the H3 res 7 region containing lat,lng (docs/api.md §3).
+// `quests` lists every quest in the region today (slot order). The top-level `quest`, `found_today`,
+// `completed_by_me` and `attempts_left` repeat the first one, for builds that only know one quest.
 import { handle, invalid, iso, isLat, isLng, json } from "../_shared/http.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { ensureProfile, sql, TZ } from "../_shared/db.ts";
@@ -28,37 +30,36 @@ Deno.serve(handle(["GET"], async (req) => {
 
   const base = { date: clock.today, region_h3: region, resets_at: iso(clock.resets_at) };
   const none = (status: string, availableAt: string | null = null) =>
-    json({ ...base, status, available_at: availableAt, quest: null, found_today: 0, completed_by_me: false, attempts_left: 0 });
+    json({ ...base, status, available_at: availableAt, quest: null, found_today: 0, completed_by_me: false, attempts_left: 0, quests: [] });
 
   if (QUIET_HOURS && (clock.hour >= 23 || clock.hour < 5)) return none("quiet_hours", iso(clock.available_at));
 
-  const [quest] = await sql`
-    select id, category, hint, place_name,
-           st_y(target::geometry) as lat, st_x(target::geometry) as lng
-    from daily_quests where region_h3 = ${hexToDb(region)} and quest_date = ${clock.today}`;
-  if (!quest) return none("none_in_region");
+  const rows = await sql`
+    select q.id, q.category, q.hint, q.place_name,
+           st_y(q.target::geometry) as lat, st_x(q.target::geometry) as lng,
+           (select coalesce(sum(finds), 0)::int from quest_finds_daily f
+              where f.quest_id = q.id and f.day = ${clock.today})                                    as found_today,
+           exists (select 1 from quest_completions c where c.quest_id = q.id and c.user_id = ${userId}) as completed,
+           (select count(*)::int from quest_attempts a where a.quest_id = q.id and a.user_id = ${userId}) as attempts
+    from daily_quests q
+    where q.region_h3 = ${hexToDb(region)} and q.quest_date = ${clock.today}
+    order by q.slot`;
+  if (rows.length === 0) return none("none_in_region");
 
-  const [stats] = await sql`
-    select (select coalesce(sum(finds), 0)::int from quest_finds_daily
-              where quest_id = ${quest.id} and day = ${clock.today})                             as found_today,
-           exists (select 1 from quest_completions where quest_id = ${quest.id} and user_id = ${userId}) as completed,
-           (select count(*)::int from quest_attempts where quest_id = ${quest.id} and user_id = ${userId}) as attempts`;
-
-  return json({
-    ...base,
-    status: "active",
-    available_at: null,
+  const quests = rows.map((q) => ({
     quest: {
-      id: quest.id,
-      category: quest.category,
-      hint: quest.hint,
-      place_name: quest.place_name,
-      target: { lat: quest.lat, lng: quest.lng },
+      id: q.id,
+      category: q.category,
+      hint: q.hint,
+      place_name: q.place_name,
+      target: { lat: q.lat, lng: q.lng },
       geofence_radius_m: 40,
     },
-    found_today: stats.found_today,
-    completed_by_me: stats.completed,
-    attempts_left: Math.max(0, MAX_ATTEMPTS - stats.attempts),
-  });
+    found_today: q.found_today,
+    completed_by_me: q.completed,
+    attempts_left: Math.max(0, MAX_ATTEMPTS - q.attempts),
+  }));
+
+  return json({ ...base, status: "active", available_at: null, ...quests[0], quests });
 }));
 

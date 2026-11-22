@@ -4,6 +4,32 @@ import Testing
 @testable import FogKit
 
 @Suite @MainActor struct ExpeditionTests {
+    @Test func freeRunIsAnExploreSession() throws {
+        let location = LocationService()
+        let clock = TestClock()
+        let expeditions = ExpeditionManager(location: nil, clock: clock.closure)
+        let pipeline = ExplorationPipeline(location: location, explorer: GridExplorer(), expeditions: expeditions)
+        _ = pipeline
+        expeditions.start(kind: .explore)
+        #expect(expeditions.active?.kind == .explore)
+        var c = Coordinate.westernCampus
+        for _ in 0..<6 {
+            location.handle(fix(c, at: clock.now))
+            c = Geo.offset(c, north: 10, east: 0)
+            clock.advance(7)
+        }
+        let summary = try #require(expeditions.end())
+        #expect(summary.kind == .explore && summary.distanceMeters > 40 && summary.newTiles > 0 && summary.sticker == nil)
+
+        // Round-trips, and history saved before `kind` existed loads as a quest session.
+        let data = try JSONCoding.encoder.encode(summary)
+        #expect(try JSONCoding.decoder.decode(ExpeditionSummary.self, from: data).kind == .explore)
+        var legacy = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "kind")
+        let old = try JSONCoding.decoder.decode(ExpeditionSummary.self, from: JSONSerialization.data(withJSONObject: legacy))
+        #expect(old.kind == .quest && old.id == summary.id)
+    }
+
     @Test func tracksDistanceTilesAndSegments() {
         let location = LocationService()
         let explorer = GridExplorer()

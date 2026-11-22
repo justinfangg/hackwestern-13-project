@@ -10,6 +10,8 @@ struct QuestSheet<Content: View>: View {
     /// Tallest the sheet may grow (top edge at the map's midpoint).
     let maxHeight: CGFloat
     @Binding var isExpanded: Bool
+    /// Explore button: starts a free run (no quest target).
+    var onExplore: () -> Void
     @ViewBuilder var content: Content
 
     /// Live height while dragging/settling. `nil` means "at the detent".
@@ -89,11 +91,9 @@ struct QuestSheet<Content: View>: View {
             .accessibilityHint(isExpanded ? "Collapses the quest sheet" : "Shows today's quest")
     }
 
-    /// Figma "Explore Button": will start free-roam explore mode. No action yet.
+    /// Figma "Explore Button": starts a free run (time, distance, route, tiles; no target).
     private var exploreButton: some View {
-        Button {
-            // TODO: start free-roam explore mode.
-        } label: {
+        Button(action: onExplore) {
             HStack(spacing: 6) {
                 Image("ExplorePlay")
                 Text("Explore")
@@ -107,7 +107,7 @@ struct QuestSheet<Content: View>: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Explore")
-        .accessibilityHint("Free roam explore mode, coming soon")
+        .accessibilityHint("Starts a free run with no quest target")
     }
 
     private func toggle() {

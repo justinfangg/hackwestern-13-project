@@ -61,7 +61,7 @@ try {
   const region = BigInt("0x" + latLngToCell(TARGET.lat, TARGET.lng, 7)).toString();
   const [{ today }] = await sql`select (now() at time zone ${TZ})::date::text as today`;
   const [existing] = await sql`select id, category, st_y(target::geometry) as lat, st_x(target::geometry) as lng
-                                from daily_quests where region_h3 = ${region} and quest_date = ${today}`;
+                                from daily_quests where region_h3 = ${region} and quest_date = ${today} and slot = 0`;
   if (existing) {
     // Today's quest is already seeded (e.g. from seed-quests): use its real target and category.
     questId = existing.id;
@@ -76,6 +76,9 @@ try {
   r = await call(token, "quest-today", { query: `?lat=${TARGET.lat}&lng=${TARGET.lng}` });
   check(r.json.status === "active" && r.json.quest?.id === questId && r.json.attempts_left === 5,
     "quest-today returns the seeded quest", `found_today=${r.json.found_today}`);
+  check(Array.isArray(r.json.quests) && r.json.quests[0]?.quest?.id === questId
+        && new Set(r.json.quests.map((q) => q.quest.id)).size === r.json.quests.length,
+    "quest-today lists today's quests, slot 0 first", `${r.json.quests?.length} quest(s): ${r.json.quests?.map((q) => q.quest.category).join(", ")}`);
 
   // ---- POST profile
   const name = `smoke_${randomUUID().slice(0, 8)}`;

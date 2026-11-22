@@ -1,190 +1,209 @@
 import SwiftUI
 import FogKit
 
-/// The image in a feed post: a square infographic summing up one session.
+/// The image in a feed post: a square card summing up one session.
 ///
-/// TEMPLATE (Justin) — Jonathan owns the final design. Swap the body for the real
-/// one; the feed only relies on this contract:
-///   • `init(post:)` with a `FeedPost` (FogKit, docs/api.md §8). Available fields:
-///     `author` (name, isMe), `startedAt`, `endedAt`, `durationS`, `distanceM`, `newTiles`,
-///     `paceSecondsPerKm`, `area` (name, kind; may be nil), `sticker` (url, category,
-///     placeName; nil unless a quest was found during the session).
+/// It is the profile's sticker stats page (Figma 10:46) wrapped into a card: the
+/// sticker (when a quest was found) on a blurred wash of its own colors, Distance
+/// and Time, the route line, and the date. The route comes only as a shape
+/// (`FeedPost.routeShape`, no coordinates), so it's drawn on its own, without a map.
+/// The feed only relies on this contract:
+///   • `init(post:)` with a `FeedPost` (FogKit, docs/api.md §8).
 ///   • Square (1:1), full card width, rounded corners. The feed adds no padding around it.
-/// Formatting helpers: `FeedFormat`, `TerritoryFormat`, `ProfilePage.distanceText`.
-/// Routes and positions are deliberately not in the post (privacy).
 struct SessionInfographic: View {
     let post: FeedPost
 
     static let cornerRadius: CGFloat = 22
 
     var body: some View {
-        SideQuestDesign.canvas
-            .overlay { ClearedTilesPattern(seed: post.id, filled: post.newTiles) }
-            .overlay(alignment: .topLeading) { heading.padding(18) }
-            .overlay { centerpiece.padding(.bottom, 70) }
-            .overlay(alignment: .bottom) { stats.padding(12) }
+        Color.clear
             .aspectRatio(1, contentMode: .fit)
+            .overlay { GeometryReader { FeedCard(post: post, width: $0.size.width) } }
             .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+                    .strokeBorder(.black.opacity(0.06), lineWidth: 1)
+            }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityText)
     }
 
-    // MARK: Pieces
-
-    private var heading: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(post.sticker == nil ? "EXPEDITION" : "QUEST FOUND")
-                .font(SideQuestDesign.ptSans(fixed: 12))
-                .tracking(1.6)
-                .foregroundStyle(post.sticker == nil ? .white.opacity(0.6) : SideQuestDesign.questActive)
-            Text(post.startedAt.formatted(.dateTime.weekday(.wide).hour().minute()))
-                .font(SideQuestDesign.calSans(18, relativeTo: nil))
-                .foregroundStyle(.white)
-        }
-    }
-
-    @ViewBuilder
-    private var centerpiece: some View {
-        if let find = post.sticker {
-            VStack(spacing: 6) {
-                AsyncImage(url: find.url) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFit()
-                    } else {
-                        Image(systemName: QuestCategory.symbolName(find.category))
-                            .font(.system(size: 64, weight: .semibold))
-                            .foregroundStyle(SideQuestDesign.questActive)
-                    }
-                }
-                .frame(width: 130, height: 130)
-                .shadow(color: .black.opacity(0.5), radius: 12, y: 6)
-                .rotationEffect(.degrees(-6))
-                if let place = find.placeName {
-                    Text(place)
-                        .font(SideQuestDesign.ptSans(fixed: 14))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .lineLimit(1)
-                }
-            }
-        } else {
-            VStack(spacing: 0) {
-                Text(post.newTiles.formatted())
-                    .font(SideQuestDesign.calSans(64, relativeTo: nil))
-                    .foregroundStyle(.white)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                Text("tiles of fog cleared")
-                    .font(SideQuestDesign.ptSans(fixed: 16))
-                    .foregroundStyle(.white.opacity(0.75))
-            }
-            .padding(.top, 20)
-        }
-    }
-
-    private var stats: some View {
-        HStack(spacing: 8) {
-            StatTile(label: "Distance", value: ProfilePage.distanceText(post.distanceM), color: SideQuestDesign.travelCard)
-            StatTile(label: "Time", value: FeedFormat.duration(post.durationS), color: SideQuestDesign.timeCard)
-            if post.sticker != nil {
-                StatTile(label: "Tiles", value: post.newTiles.formatted(), color: SideQuestDesign.cityCard)
-            } else {
-                StatTile(label: "Pace /km", value: FeedFormat.pace(post.paceSecondsPerKm), color: SideQuestDesign.cityCard)
-            }
-        }
-    }
-
     private var accessibilityText: String {
-        var parts = [
-            "\(ProfilePage.distanceText(post.distanceM)) in \(FeedFormat.duration(post.durationS))",
-            "\(post.newTiles) new tiles",
-        ]
+        var parts = ["\(ProfilePage.distanceText(post.distanceM)) in \(FeedFormat.duration(post.durationS))"]
         if let find = post.sticker { parts.append("found the \(QuestCategory.displayName(find.category))") }
+        if post.routeShape != nil { parts.append("route drawn") }
+        parts.append(post.startedAt.formatted(.dateTime.month(.wide).day().year()))
         return parts.joined(separator: ", ")
     }
 }
 
-/// Small solid stat card, same style as the profile's summary cards.
-private struct StatTile: View {
-    let label: String
-    let value: String
-    let color: Color
+/// The card's contents, laid out like the stats page (403 pt wide) scaled to the card.
+/// The sticker is downloaded once, then given the same white cutout outline as on
+/// the memory board.
+private struct FeedCard: View {
+    let post: FeedPost
+    let width: CGFloat
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(label)
-                .font(SideQuestDesign.ptSans(fixed: 13))
-                .foregroundStyle(.white.opacity(0.85))
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            Spacer(minLength: 0)
-            Text(value)
-                .font(SideQuestDesign.calSans(22, relativeTo: nil))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .frame(maxWidth: .infinity)
-        .frame(height: 62)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(color))
+    @Environment(\.displayScale) private var displayScale
+    @State private var artwork: UIImage?
+    @State private var outlined: UIImage?
+
+    private static let ink = Color(red: 0x3B / 255, green: 0x3B / 255, blue: 0x3B / 255)
+
+    private var k: CGFloat { width / 403 }
+    /// Green when the session found a quest, orange otherwise (the map's route colors).
+    private var routeColor: Color {
+        post.sticker == nil ? SideQuestDesign.questActive : SideQuestDesign.questCompleted
     }
-}
-
-/// Honeycomb backdrop: a few hexes "cleared" (lit green) among faint fogged ones. More tiles
-/// cleared in the session lights more of them. Seeded by the post id so it doesn't shimmer
-/// between redraws.
-private struct ClearedTilesPattern: View {
-    let seed: UUID
-    let filled: Int
+    /// The sticker's box at the top of the card.
+    private var stickerBox: CGSize { CGSize(width: width * 0.58, height: width * 0.30) }
 
     var body: some View {
-        Canvas { context, size in
-            let radius: CGFloat = 16
-            let width = sqrt(3) * radius
-            let rowHeight = radius * 1.5
-            // Up to ~40% of hexes lit, scaling with the session's tiles.
-            let share = min(0.08 + Double(filled) / 800, 0.4)
-            var rng = SplitMix64(seed: seed)
-            var row = 0
-            var y: CGFloat = 0
-            while y < size.height + radius {
-                var x: CGFloat = row.isMultiple(of: 2) ? 0 : width / 2
-                while x < size.width + width {
-                    let hex = Self.hexagon(center: CGPoint(x: x, y: y), radius: radius - 1.5)
-                    let lit = Double(rng.next() % 1000) / 1000 < share
-                    context.fill(hex, with: .color(lit ? SideQuestDesign.accentGreen.opacity(0.55) : .white.opacity(0.04)))
-                    x += width
+        ZStack {
+            SideQuestDesign.profileSurface
+            backdrop
+            RecapDotField()
+
+            VStack(spacing: 0) {
+                if let find = post.sticker {
+                    sticker(find)
+                        .frame(height: width * 0.36)
+                        .padding(.top, width * 0.04)
+                } else {
+                    Spacer().frame(height: width * 0.08)
                 }
-                y += rowHeight
-                row += 1
+
+                HStack(alignment: .top, spacing: 0) {
+                    stat(label: "Distance", value: ProfilePage.distanceText(post.distanceM))
+                    stat(label: "Time", value: FeedFormat.duration(post.durationS))
+                }
+                .padding(.horizontal, 24 * k)
+
+                RouteShapeLine(points: post.routeShape, color: routeColor, lineWidth: 5)
+                    .padding(.horizontal, width * 0.2)
+                    .padding(.vertical, width * 0.035)
+                    .frame(maxHeight: .infinity)
+
+                Text(post.startedAt.formatted(.dateTime.month(.wide).day().year()))
+                    .font(SideQuestDesign.ptSans(fixed: 13))
+                    .tracking(-0.3)
+                    .foregroundStyle(Self.ink.opacity(0.6))
+                    .padding(.bottom, 16)
             }
         }
-        // Keep the text readable over the pattern.
-        .overlay {
-            LinearGradient(colors: [.black.opacity(0.45), .clear, .black.opacity(0.55)],
-                           startPoint: .top, endPoint: .bottom)
+        .frame(width: width, height: width)
+        .task(id: post.sticker?.url) { await load() }
+    }
+
+    private func stat(label: String, value: String) -> some View {
+        VStack(spacing: 0) {
+            Text(label)
+                .font(SideQuestDesign.ptSans(fixed: 17 * k))
+                .tracking(-0.51)
+            Text(value)
+                .font(SideQuestDesign.calSans(38.911 * k, relativeTo: nil))
+                .tracking(-0.39)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
+        .foregroundStyle(Self.ink)
+        .frame(maxWidth: .infinity)
+    }
+
+    // The wash: the sticker's own colors, hugely blurred (Figma "Map Image" 10:59),
+    // or a soft glow in the route's color when there's no sticker.
+    @ViewBuilder
+    private var backdrop: some View {
+        if let artwork {
+            Image(uiImage: artwork)
+                .resizable()
+                .scaledToFill()
+                .frame(width: width * 1.5, height: width * 1.1)
+                .clipped()
+                .rotationEffect(.degrees(13))
+                .blur(radius: width * 0.2)
+                .opacity(0.6)
+                .position(x: width * 0.52, y: width * 0.25)
+                .frame(width: width, height: width)
+                .clipped()
+                .allowsHitTesting(false)
+        } else {
+            RadialGradient(
+                colors: [routeColor.opacity(0.22), .clear],
+                center: UnitPoint(x: 0.5, y: post.sticker == nil ? 0.6 : 0.25),
+                startRadius: 0,
+                endRadius: width * 0.6
+            )
+        }
+    }
+
+    private func sticker(_ find: FeedPost.Find) -> some View {
+        Group {
+            if let outlined {
+                Image(uiImage: outlined)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: stickerBox.width, height: stickerBox.height)
+            } else {
+                Image(systemName: QuestCategory.symbolName(find.category))
+                    .font(.system(size: width * 0.1, weight: .semibold))
+                    .foregroundStyle(SideQuestDesign.questActive)
+                    .frame(width: width * 0.24, height: width * 0.24)
+                    .background(Circle().fill(.white))
+            }
+        }
+        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+        .rotationEffect(.degrees(-6))
         .accessibilityHidden(true)
     }
 
-    private static func hexagon(center: CGPoint, radius: CGFloat) -> Path {
-        Path { path in
-            for i in 0..<6 {
-                let angle = CGFloat(i) * .pi / 3 + .pi / 6
-                let point = CGPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle))
-                i == 0 ? path.move(to: point) : path.addLine(to: point)
-            }
-            path.closeSubpath()
+    private func load() async {
+        guard let find = post.sticker else { return }
+        guard let (data, _) = try? await URLSession.shared.data(from: find.url),
+              let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else { return }
+
+        let outline = width * 0.02
+        let pad = StickerOutline.padding(for: outline)
+        let bounds = CGSize(width: stickerBox.width - pad * 2, height: stickerBox.height - pad * 2)
+        let fit = min(bounds.width / image.size.width, bounds.height / image.size.height)
+        let art = CGSize(width: image.size.width * fit, height: image.size.height * fit)
+        let scale = displayScale
+        let id = find.url.absoluteString
+        let rendered = await Task.detached(priority: .userInitiated) {
+            StickerOutline.render(image, cacheKey: "feed.\(id)", canvas: art,
+                                  imageRect: CGRect(origin: .zero, size: art),
+                                  thickness: outline, scale: scale)
+        }.value
+
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            artwork = image
+            outlined = rendered
         }
     }
 }
 
-private extension SplitMix64 {
-    /// Seeded from a UUID's bytes (the generator itself lives in CloudField.swift).
-    init(seed: UUID) {
-        let b = seed.uuid
-        self.init(seed: [b.0, b.1, b.2, b.3, b.4, b.5, b.6, b.7, b.8, b.9, b.10, b.11, b.12, b.13, b.14, b.15]
-            .reduce(0) { $0 &* 31 &+ UInt64($1) })
+/// Draws `FeedPost.routeShape` (points in a unit square) as a rounded line, fitted
+/// and centred in the space it's given. Draws nothing without a shape.
+struct RouteShapeLine: View {
+    let points: [FeedPost.ShapePoint]?
+    let color: Color
+    var lineWidth: CGFloat = 5
+
+    var body: some View {
+        Canvas { context, size in
+            guard let points, points.count >= 2 else { return }
+            let side = max(min(size.width, size.height) - lineWidth, 1)
+            let origin = CGPoint(x: (size.width - side) / 2, y: (size.height - side) / 2)
+            var path = Path()
+            for (i, p) in points.enumerated() {
+                let point = CGPoint(x: origin.x + p.x * side, y: origin.y + p.y * side)
+                i == 0 ? path.move(to: point) : path.addLine(to: point)
+            }
+            context.stroke(path, with: .color(color),
+                           style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+        }
+        .accessibilityHidden(true)
     }
 }
 

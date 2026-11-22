@@ -336,6 +336,9 @@ final class AuthStubURLProtocol: URLProtocol, @unchecked Sendable {
         #expect(first.durationS == 2539 && first.newTiles == 184 && first.area?.kind == "campus")
         #expect(first.sticker?.category == "bench" && first.sticker?.placeName == "University College Hill")
         #expect(r.posts[1].author.isMe && r.posts[1].area == nil && r.posts[1].sticker == nil)
+        let shape = try #require(first.routeShape)
+        #expect(shape.count == 6 && shape.allSatisfy { (0...1).contains($0.x) && (0...1).contains($0.y) })
+        #expect(r.posts[1].routeShape == nil)
         let pace = try #require(first.paceSecondsPerKm)
         #expect(abs(pace - 2539 / 3.1046) < 0.01)
     }

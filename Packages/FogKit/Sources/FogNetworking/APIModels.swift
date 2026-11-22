@@ -539,9 +539,23 @@ public struct FeedPost: Hashable, Codable, Sendable, Identifiable {
     public var newTiles: Int
     public var area: Area?
     public var sticker: Find?
+    /// The route as a shape only: points in a unit square (x right, y down, north up, longer
+    /// side spanning 0–1, centred). No coordinates. Nil without a recorded route.
+    public var routeShape: [ShapePoint]?
+
+    /// A point of `routeShape`, in 0…1.
+    public struct ShapePoint: Hashable, Codable, Sendable {
+        public var x: Double
+        public var y: Double
+        public init(x: Double, y: Double) {
+            self.x = x
+            self.y = y
+        }
+    }
 
     public init(id: UUID, author: Author, startedAt: Date, endedAt: Date, durationS: Int,
-                distanceM: Double, newTiles: Int, area: Area?, sticker: Find?) {
+                distanceM: Double, newTiles: Int, area: Area?, sticker: Find?,
+                routeShape: [ShapePoint]? = nil) {
         self.id = id
         self.author = author
         self.startedAt = startedAt
@@ -551,6 +565,7 @@ public struct FeedPost: Hashable, Codable, Sendable, Identifiable {
         self.newTiles = newTiles
         self.area = area
         self.sticker = sticker
+        self.routeShape = routeShape
     }
 
     /// Average pace in seconds per km (nil for sessions too short to say).

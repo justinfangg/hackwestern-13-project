@@ -13,7 +13,11 @@
         "url": "https://febubbwoyptplfnsdqkv.supabase.co/storage/v1/object/public/stickers/1f2e3d4c-5b6a-4789-8a9b-0c1d2e3f4a5b/9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f.png",
         "category": "bench",
         "place_name": "University College Hill"
-      }
+      },
+      "route_shape": [
+        { "x": 0.120, "y": 0.910 }, { "x": 0.150, "y": 0.700 }, { "x": 0.330, "y": 0.640 },
+        { "x": 0.410, "y": 0.420 }, { "x": 0.620, "y": 0.330 }, { "x": 0.700, "y": 0.090 }
+      ]
     },
     {
       "id": "2a3b4c5d-6e7f-4801-9a2b-3c4d5e6f7a80",
@@ -24,7 +28,8 @@
       "distance_m": 1812.0,
       "new_tiles": 96,
       "area": null,
-      "sticker": null
+      "sticker": null,
+      "route_shape": null
     }
   ],
   "next_before": "2026-11-22T11:55:02.417Z"

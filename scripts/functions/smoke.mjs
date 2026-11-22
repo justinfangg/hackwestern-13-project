@@ -185,6 +185,8 @@ try {
   const post = r.json.posts?.find((p) => p.id === postId);
   check(r.status === 200 && post?.author?.is_me === true && post.author.name === name && post.new_tiles === 17 && post.distance_m === 420,
     "feed: my finished session is a post with my username", JSON.stringify(post));
+  // This session synced no pings, so it has no route line to shape.
+  check(post && "route_shape" in post && post.route_shape === null, "feed: route_shape null without a route");
   const ends = (r.json.posts ?? []).map((p) => p.ended_at);
   check(ends.every((e, i) => i === 0 || ends[i - 1] >= e), "feed: newest first");
   check((await call(token, "feed", { query: "?limit=0" })).json.error?.code === "invalid_request", "feed bad limit -> invalid_request");

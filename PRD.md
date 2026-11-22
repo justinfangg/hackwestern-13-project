@@ -28,8 +28,9 @@ Only work pushed to `main` is counted.
 | Map page, cloud fog visuals, active-quest card, quest sheet, quest camera screen | Jonathan | ✅ | `FogOfWar/FogOfWar/UI/` |
 | **Tab-bar navigation** (Figma 55:3722): Social / Map / Leaderboard pages that slide left and right, each rounded to the iPhone's screen corners. Replaces the old map-over-profile split | Jonathan | ✅ | `UI/MainView.swift`, `UI/MainTabBar.swift` |
 | Map chrome from the new design: city name at the top, profile button top right (opens Profile as a sheet), locate button bottom right, wider Quests sheet with an **Explore** button | Jonathan (UI) · Justin (Explore free run) | ✅ | `UI/MapPage.swift`, `UI/QuestSheet.swift` |
-| **Social activity feed** (first tab): Instagram-style scrolling feed, one post per finished session from every player (author, area, time ago, infographic, caption); pull to refresh, loads older posts on scroll. `feed` Edge Function, `FeedModel`, template `SessionInfographic` | Justin (feed) · Jonathan (infographic design) | ✅ feed + template (smoke 35/35 locally, 69 FogKit tests); ✅ `feed` live on `SideQuest`; 🟡 infographic is a placeholder design for Jonathan to replace | `supabase/functions/feed/`, `Social/` |
+| **Social activity feed** (first tab): Instagram-style scrolling feed, one post per finished session from every player (author, area, time ago, session card); pull to refresh, loads older posts on scroll. Each post's card reuses the sticker stats design: the sticker (if a quest was found) on a blur of its own colours, Distance and Time, the **route line** (green if a quest was found, orange otherwise), and the date. No caption and no tile count. `feed` now returns `route_shape`: the route scaled into a unit square, with no coordinates (docs/api.md §8). `feed` Edge Function, `FeedModel`, `SessionInfographic` | Justin (feed) · Jonathan (card design, `route_shape`) | ✅ feed + card (FogKit feed tests pass); ✅ `feed` with `route_shape` redeployed to `SideQuest` 2026-11-22; ⬜ smoke test not rerun since `route_shape` was added | `supabase/functions/feed/`, `Social/` |
 | Profile page: name, distance, city coverage, sticker board. Now opened from the profile button on the map | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
+| **Sticker stats** (Figma 10:46): tapping a sticker on the board opens its stats inside the Profile sheet. The sticker flies from the board to the top while the profile fades out and the stats fade in, both through a blur. It keeps the holographic tilt and reflections when dragged. Shows a heavy blur of the sticker's own colours, Distance and Time, the route on a map with Figma's "Organic edge blur" (ported to Metal) running to the bottom of the screen, and the date. An × at the top right reverses the animation. Replaces the old full-screen sticker view | Jonathan | ✅ (demo stickers have no walk attached, so they show "—" and no map; launch with `-holographic-expedition-fixture` to see sample data) | `Profile/StickerStatsView.swift`, `Profile/OrganicEdgeBlur.metal`, `Profile/ProfilePage.swift` |
 | Onboarding (username + permission screens) | Jonathan | ⬜ | |
 | Designed expedition recap card | Jonathan | ⬜ (the app still uses Justin's plain `RecapSheet` from `Dev/`) | |
 | **Territory leaderboard** (% / time / distance explored per campus, park, neighbourhood): areas from OSM, `leaderboard` function, `LeaderboardModel`, Leaderboard page (now the third tab; the Profile trophy button still opens it full screen) | Justin | ✅ deployed on the original project (smoke 31/31, 67 FogKit tests); ✅ live on `SideQuest` | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
@@ -47,6 +48,7 @@ Only work pushed to `main` is counted.
 - **Territory leaderboards are back in scope** (2026-11-22): per-area rankings by % explored, time and distance (§15, docs/api.md §7).
 - **Tab-bar navigation** (2026-11-22, Figma 55:3722): the drag-to-split between map and profile is gone. A bottom tab bar switches between three full-screen pages, **Social | Map | Leaderboard**, which slide left and right (0.3 s, no bounce). Profile is no longer a page: it opens as a sheet from the avatar button at the top right of the map (§9, §15).
 - **Map chrome moved** to match the design: city name pill at the top, locate button bottom right (always visible, hidden while the quest sheet is open or the camera is up), a wider Quests sheet sitting above the tab bar. The sheet's **Explore** button starts a free run: a session with no quest target (time, distance, route, tiles).
+- **Feed posts show route shapes** (2026-11-22): a post now includes how the session's route looked, but never where. `feed` sends `route_shape`, the route line scaled into a unit square with north up and no coordinates or scale, so it can be drawn but not placed on a map (§11 Privacy, docs/api.md §8).
 - **Supabase rebuilt on a new project:** Jonathan recreated the backend as project `SideQuest` (ref `qsxakuynoyxsyxhkxvuo`) with his own Gemini key, and `SupabaseConfig.swift` points at it. Setup was: link the CLI, `supabase db push --remote`, create the two buckets, `supabase secrets set GEMINI_API_KEY=…`, deploy the functions, `npm run db:seed-quests`, and **turn on anonymous sign-ins in the dashboard**. With that switch off, every request is rejected and the map shows no quest.
 
 ### Left to do for the demo
@@ -62,7 +64,7 @@ Only work pushed to `main` is counted.
 4. **Designed expedition recap card** to replace `RecapSheet` (export with `ShareImage.render`). Then delete `Dev/`.
 5. **Place `PathTraceMapView`** (Ayman's) in Profile, using `services.profile.routeSegments`.
 6. **Streak and weekly chart** in Profile, if they're in the design (`services.profile.stats.currentStreak`, `weeklyActivity`).
-6a. **Session infographic design** in `Social/SessionInfographic.swift` (the feed is built; replace the template's body, keep `init(post:)` and the square shape; the header comment lists the data available). (The Explore free run is built: `UI/ActiveExploreCard.swift`; restyle it if the design changes.)
+6a. ✅ **Session card design** in `Social/SessionInfographic.swift`: the sticker stats design with the route line (2026-11-22). (The Explore free run is built: `UI/ActiveExploreCard.swift`; restyle it if the design changes.)
 6b. **Real display-corner radius:** the tab pages are rounded with UIKit's private `_displayCornerRadius` (fallback 55 pt). Fine for the hackathon; replace with a fixed value before any App Store build.
 
 **Justin**
@@ -219,7 +221,7 @@ Priority: **P0** = must ship · **P1** = polish, done once all P0s work end to e
 
 | ID | Requirement | Priority |
 |---|---|---|
-| P-1 | Sticker book grid with tap-to-view detail (date, place, mini map) | P0 |
+| P-1 | Sticker book grid with tap-to-view detail (date, place, mini map). Built as the sticker board plus the in-sheet sticker stats view: Distance, Time, route map and date | P0 🟡 (sticker stats ✅; the board still uses placeholder stickers) |
 | P-2 | Path-tracing map: every route the user has walked, drawn over their cleared area, Strava-heatmap style | P0 |
 | P-3 | Lifetime stats: tiles cleared, km travelled, quests completed, current streak | P0 |
 | P-4 | Expedition history list | P1 |
@@ -246,7 +248,7 @@ Priority: **P0** = must ship · **P1** = polish, done once all P0s work end to e
 | N-4 | Map top bar: current city name centered, profile button at the top right that opens Profile as a sheet | P0 |
 | N-5 | Locate button at the bottom right of the map, above the Quests sheet, recenters on the player and resumes following. Hidden while the quest sheet is expanded or the camera is open | P0 |
 | N-6 | Quests sheet is wide, sits above the tab bar, and has an Explore button on its right. Explore starts a **free run**: a session with no quest target that records time, distance, route and new tiles. A dark card (same size as the active-quest card) shows the live timer, distance and tiles with an End button; ending shows the recap and posts the session to the Activity feed | P1 ✅ |
-| N-7 | Social page (first tab): activity feed of everyone's finished sessions, newest first, each post an infographic of the session's metrics (and its sticker if a quest was found) | P1 |
+| N-7 | Social page (first tab): activity feed of everyone's finished sessions, newest first. Each post is a square card: the sticker if a quest was found, Distance and Time, the route line drawn from `route_shape` (green if a quest was found, orange otherwise), and the date | P1 ✅ |
 
 ## 9. Information Architecture / Screens
 
@@ -255,7 +257,7 @@ Three tabs in a bottom tab bar (Figma 55:3722). Switching slides the pages left 
 ```
 Tab bar:  Social  |  Map (default)  |  Leaderboard
 ├── Social
-│   └── Activity feed: one post per finished session (author, area, time ago, session infographic, caption)
+│   └── Activity feed: one post per finished session (author, area, time ago, session card: sticker, Distance/Time, route line, date)
 ├── Map
 │   ├── Fog map + user avatar + quest marker
 │   ├── Top: city name (centered), profile button (top right → opens Profile sheet)
@@ -269,7 +271,8 @@ Tab bar:  Social  |  Map (default)  |  Leaderboard
 
 Profile (sheet from the map's top-right button; its trophy button also opens the Leaderboard full screen)
     ├── Avatar, lifetime stats, streak
-    ├── Sticker book grid
+    ├── Sticker book grid → tap a sticker → Sticker stats in the same sheet (sticker flies to the top;
+    │   Distance, Time, route map, date; × to return)
     ├── Path-tracing map
     └── Expedition history
 ```
@@ -487,7 +490,7 @@ UI design is owned by **Jonathan** and built in parallel with feature logic, so 
 | Performance | 60 fps map pan/zoom with 10k cleared tiles; tile clearing visible < 300 ms after a fix |
 | Battery | ≤ 8%/hour during an active expedition. High-accuracy GPS only while an expedition is active |
 | Offline | Exploration works fully offline; quests need network for verification only |
-| Privacy | Location history is private; no other user ever sees your paths or position. The only shared data is the anonymous "N found today" count. Photos are used only for verification and stickers |
+| Privacy | Location history is private; no other user ever sees your position or where you walked. Shared data: the anonymous "N found today" count, and feed posts (distance, time, territory name, sticker, and the route's **shape** with no coordinates or scale). Photos are used only for verification and stickers |
 | Permissions | Clear pre-permission screens for Location (When In Use → Always) and Camera; app stays usable if "Always" is denied (fog clears only while app is open) |
 | Safety | Quest targets restricted to public places; "Be aware of your surroundings" on the quest screen; no quests between 23:00–05:00 local |
 | Accessibility | Dynamic Type, VoiceOver labels on map controls, fog colour with enough contrast against cleared areas |

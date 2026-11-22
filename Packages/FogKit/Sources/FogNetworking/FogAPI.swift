@@ -322,6 +322,20 @@ public actor MockFogAPI: FogAPI {
                                    metric: metric, totalPlayers: entries.count, entries: entries, me: me)
     }
 
+    /// A wandering walk in the unit square, different for each seed (stands in for `route_shape`).
+    static func sampleShape(seed: Int) -> [FeedPost.ShapePoint] {
+        let raw = (0...40).map { i -> (Double, Double) in
+            let t = Double(i) / 40
+            let s = Double(seed)
+            return (t + 0.18 * sin(t * (5 + s) + s), 0.5 * sin(t * (2.2 + s * 0.4) + s * 1.7) + 0.25 * cos(t * 7 + s))
+        }
+        let xs = raw.map(\.0), ys = raw.map(\.1)
+        let minX = xs.min()!, minY = ys.min()!
+        let span = max(xs.max()! - minX, ys.max()! - minY)
+        let padX = (1 - (xs.max()! - minX) / span) / 2, padY = (1 - (ys.max()! - minY) / span) / 2
+        return raw.map { .init(x: padX + ($0.0 - minX) / span, y: padY + ($0.1 - minY) / span) }
+    }
+
     // Fake feed so the social page works offline: a few days of sessions from other players.
     public static func sampleFeed(now: Date = Date(), myName: String? = nil) -> [FeedPost] {
         let stickerBase = "https://example.invalid/stickers/"
@@ -334,7 +348,8 @@ public actor MockFogAPI: FogAPI {
                 startedAt: end.addingTimeInterval(-Double(minutes * 60)), endedAt: end,
                 durationS: minutes * 60, distanceM: km * 1000, newTiles: tiles,
                 area: area.map { .init(name: $0.0, kind: $0.1) },
-                sticker: find.map { .init(url: URL(string: stickerBase + $0.0 + ".png")!, category: $0.0, placeName: $0.1) })
+                sticker: find.map { .init(url: URL(string: stickerBase + $0.0 + ".png")!, category: $0.0, placeName: $0.1) },
+                routeShape: sampleShape(seed: n))
         }
         return [
             post(1, "mapmaker_ana", hoursAgo: 0.4, minutes: 42, km: 3.1, tiles: 184,

@@ -128,7 +128,7 @@ struct SocialPage: View {
 
 // MARK: - Post
 
-/// One post: author row, the session infographic, then a one-line caption.
+/// One post: author row, then the session infographic.
 struct FeedPostCard: View {
     let post: FeedPost
 
@@ -136,7 +136,6 @@ struct FeedPostCard: View {
         VStack(alignment: .leading, spacing: 12) {
             authorRow
             SessionInfographic(post: post)
-            caption
         }
         .accessibilityElement(children: .combine)
     }
@@ -168,14 +167,6 @@ struct FeedPostCard: View {
         .padding(.horizontal, 4)
     }
 
-    private var caption: some View {
-        Text(FeedFormat.caption(for: post))
-            .font(SideQuestDesign.ptSans(16, relativeTo: .body))
-            .tracking(-0.3)
-            .foregroundStyle(SideQuestDesign.primaryText)
-            .padding(.horizontal, 4)
-            .fixedSize(horizontal: false, vertical: true)
-    }
 }
 
 /// Round initial on a colour picked from the name, so a player always gets the same one.
@@ -219,17 +210,5 @@ enum FeedFormat {
         guard let secondsPerKm, secondsPerKm.isFinite else { return "–" }
         let total = Int(secondsPerKm.rounded())
         return "\(total / 60)'\(String(format: "%02d", total % 60))\""
-    }
-
-    static func caption(for post: FeedPost) -> String {
-        let who = post.author.isMe ? "You" : post.author.name
-        let tiles = post.newTiles == 1 ? "1 new tile" : "\(post.newTiles.formatted()) new tiles"
-        var text = "\(who) cleared \(tiles)"
-        if let area = post.area { text += " around \(area.name)" }
-        if let find = post.sticker {
-            text += " and found the \(QuestCategory.displayName(find.category))"
-            if let place = find.placeName { text += " at \(place)" }
-        }
-        return text + "."
     }
 }

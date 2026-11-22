@@ -1,7 +1,8 @@
 // GET feed[?before=<iso>&limit=<n>]   : finished sessions from everyone, newest first (docs/api.md §8)
 // One post per ended expedition. There's no friends list yet, so every player's sessions show
-// (hackathon scope). Each post carries the session's metrics, the territory it started in, and
-// the sticker if a quest was found during it. Never routes or exact positions.
+// (hackathon scope). Each post carries the session's metrics, the territory it started in, the
+// sticker if a quest was found during it, and the route's shape. Never coordinates: the shape is
+// the route line scaled into a unit square, so it can be drawn but not placed on a map.
 import { handle, invalid, iso, json } from "../_shared/http.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { ensureProfile, sql } from "../_shared/db.ts";
@@ -10,6 +11,8 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 /** Sessions shorter than this are noise (opened the app, walked to the fridge). */
 const MIN_DISTANCE_M = 50;
+/** Enough points for a smooth line at card size; keeps posts small. */
+const MAX_SHAPE_POINTS = 80;
 
 Deno.serve(handle(["GET"], async (req) => {
   const userId = await requireUser(req);
@@ -28,7 +31,9 @@ Deno.serve(handle(["GET"], async (req) => {
            extract(epoch from (e.ended_at - e.started_at))::int as duration_s,
            coalesce(pr.username, 'Explorer ' || upper(left(e.user_id::text, 4))) as name,
            area.name as area_name, area.kind as area_kind,
-           find.sticker_url, find.category, find.place_name
+           find.sticker_url, find.category, find.place_name,
+           case when e.path is not null
+                then st_asgeojson(st_simplify(e.path::geometry, 0.00002))::json -> 'coordinates' end as points
     from expeditions e
     left join profiles pr on pr.id = e.user_id
     -- Territory the session started in (smallest area that covers the first fix).
@@ -64,6 +69,7 @@ Deno.serve(handle(["GET"], async (req) => {
     new_tiles: r.new_tiles,
     area: r.area_name == null ? null : { name: r.area_name, kind: r.area_kind },
     sticker: r.sticker_url == null ? null : { url: r.sticker_url, category: r.category, place_name: r.place_name },
+    route_shape: Array.isArray(r.points) ? routeShape(r.points as [number, number][]) : null,
   }));
 
   return json({
@@ -73,3 +79,24 @@ Deno.serve(handle(["GET"], async (req) => {
     next_before: rows.length === limit ? new Date(rows[rows.length - 1].ended_at).toISOString() : null,
   });
 }));
+
+/**
+ * The route as a unitless shape: projected flat (longitude shrunk by cos(latitude)), north up,
+ * scaled so its longer side spans 0…1 and centred in the unit square (x right, y down).
+ * No position or scale survives, so a post shows how someone walked but not where.
+ */
+function routeShape(points: [number, number][]): { x: number; y: number }[] | null {
+  if (points.length < 2) return null;
+  const lat0 = points.reduce((sum, [, lat]) => sum + lat, 0) / points.length;
+  const k = Math.cos((lat0 * Math.PI) / 180);
+  const flat = points.map(([lng, lat]) => [lng * k, -lat] as const);
+  const xs = flat.map(([x]) => x), ys = flat.map(([, y]) => y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const span = Math.max(maxX - minX, maxY - minY);
+  if (!(span > 0)) return null;
+  const padX = (1 - (maxX - minX) / span) / 2, padY = (1 - (maxY - minY) / span) / 2;
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  const count = Math.min(flat.length, MAX_SHAPE_POINTS);
+  const picked = Array.from({ length: count }, (_, i) => flat[Math.round((i * (flat.length - 1)) / (count - 1))]);
+  return picked.map(([x, y]) => ({ x: round(padX + (x - minX) / span), y: round(padY + (y - minY) / span) }));
+}

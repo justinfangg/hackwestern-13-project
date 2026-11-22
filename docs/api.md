@@ -261,7 +261,7 @@ Territory leaderboards per named area: Western's campus, parks, and neighbourhoo
 
 ## 8. `GET feed` (social)
 
-The Social tab's activity feed: every player's finished sessions, newest first, one post per ended expedition ([mock](mocks/feed.200.json)). There's no friends list yet, so everyone's sessions appear. Sessions under 50 m aren't posted. Posts never include routes or positions.
+The Social tab's activity feed: every player's finished sessions, newest first, one post per ended expedition ([mock](mocks/feed.200.json)). There's no friends list yet, so everyone's sessions appear. Sessions under 50 m aren't posted. Posts never include positions: the route comes only as a shape (see `route_shape`).
 
 `GET feed?limit=<1–50, default 20>&before=<ISO timestamp>` (`before` = the previous page's `next_before`):
 ```json
@@ -270,7 +270,8 @@ The Social tab's activity feed: every player's finished sessions, newest first, 
               "started_at": "2026-11-22T14:02:11Z", "ended_at": "2026-11-22T14:44:30Z",
               "duration_s": 2539, "distance_m": 3104.6, "new_tiles": 184,
               "area": { "name": "Western University", "kind": "campus" },
-              "sticker": { "url": "https://…/stickers/<user>/<completion>.png", "category": "bench", "place_name": "University College Hill" } }],
+              "sticker": { "url": "https://…/stickers/<user>/<completion>.png", "category": "bench", "place_name": "University College Hill" },
+              "route_shape": [{ "x": 0.12, "y": 0.91 }, { "x": 0.18, "y": 0.62 }, { "x": 0.55, "y": 0.09 }] }],
   "next_before": "2026-11-22T11:55:02.417Z" }
 ```
 | Field | Notes |
@@ -278,6 +279,7 @@ The Social tab's activity feed: every player's finished sessions, newest first, 
 | `author.name` | username, or `Explorer XXXX` without one (same as §7) |
 | `area` | the smallest territory (§7) that covers the session's first GPS fix; `null` outside every area or without pings |
 | `sticker` | the first quest the author completed between the session's start and 10 min after its end; else `null` |
+| `route_shape` | the session's route line (from `expeditions.path`) as up to 80 points in a unit square: x right, y down, north up, longer side spanning 0–1 and centred. No coordinates or scale, so it can be drawn but not located. `null` without a route (fewer than 2 pings) |
 | `next_before` | keeps milliseconds; `null` on the last page |
 
 Errors: `400 invalid_request` (bad `limit` or `before`).

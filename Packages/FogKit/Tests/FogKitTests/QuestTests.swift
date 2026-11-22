@@ -24,6 +24,26 @@ import Testing
                                                    details: distance.map { .init(distanceM: $0, radiusM: 40, fields: nil) }))
     }
 
+    @Test func demoModeSucceedsInRangeWithoutCallingTheVerifier() async {
+        let (m, verifier) = makeModel([])
+        m.demoAutoSuccess = true
+        m.demoVerifyDuration = .zero
+        var found: Sticker?
+        m.onSuccess = { s, _ in found = s }
+
+        m.updateLocation(near(200))
+        await m.capture(solidImage(width: 8, height: 8))
+        #expect(m.state == .locked)   // still has to walk into range
+
+        m.updateLocation(near(10))
+        await m.capture(solidImage(width: 8, height: 8))
+        guard case .success(let sticker) = m.state else { Issue.record("expected success, got \(m.state)"); return }
+        #expect(verifier.calls == 0)
+        #expect(found == sticker)
+        #expect(sticker.localImageURL != nil)
+        #expect(m.attemptsLeft == 5)
+    }
+
     @Test func unlocksInsideGeofenceWithHysteresis() {
         let (m, _) = makeModel([])
         m.updateLocation(near(200))

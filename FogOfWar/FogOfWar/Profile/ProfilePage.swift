@@ -33,8 +33,14 @@ struct ProfilePage: View {
     private static let focusAnimation: Animation = .spring(duration: 0.55, bounce: 0.16)
     private static let fadeBlur: CGFloat = 14
 
-    init(contentHeight: CGFloat) {
+    /// A sticker just collected: the board drops it into place when the page opens.
+    var placingStickerID: String? = nil
+    var onStickerPlaced: () -> Void = {}
+
+    init(contentHeight: CGFloat, placingStickerID: String? = nil, onStickerPlaced: @escaping () -> Void = {}) {
         self.contentHeight = contentHeight
+        self.placingStickerID = placingStickerID
+        self.onStickerPlaced = onStickerPlaced
         #if DEBUG
         if let fixture = HolographicStickerDebugFixture.current {
             _focus = State(initialValue: StickerFocus(
@@ -95,6 +101,8 @@ struct ProfilePage: View {
                 stickers: boardStickers,
                 label: Date.now.formatted(.dateTime.month(.abbreviated).year()),
                 hiddenStickerID: focus?.sticker.id,
+                placingStickerID: placingStickerID,
+                onPlaced: onStickerPlaced,
                 onSelect: { openStats(for: $0, from: $1) }
             )
                 .frame(height: boardHeight)

@@ -22,6 +22,8 @@ struct ActiveQuestCard: View {
     let onPhoto: (CGImage) -> Void
     /// Debug bypass: capture is always enabled and the shutter submits this image.
     var debugPhoto: (() -> CGImage?)? = nil
+    /// Demo mode: the camera shows (and captures) this photo.
+    var demoPhoto: CGImage? = nil
     /// A photo being checked (or its answer): replaces the camera face.
     var resultFace: AnyView? = nil
     /// Height of the card while `resultFace` shows (it grows once the answer is in).
@@ -52,7 +54,8 @@ struct ActiveQuestCard: View {
                         withAnimation(Self.cameraTransition) { isCameraOpen = false }
                     },
                     onPhoto: onPhoto,
-                    debugPhoto: debugPhoto
+                    debugPhoto: debugPhoto,
+                    demoPhoto: demoPhoto
                 )
                 .frame(height: cameraHeight)
                 .transition(.blurReplace)

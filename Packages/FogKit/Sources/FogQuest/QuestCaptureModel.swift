@@ -44,6 +44,15 @@ public final class QuestCaptureModel {
     /// Debug only (set by `FogServices` from `DebugSettings.isQuestCameraBypassActive`): the camera is usable
     /// from any state and `capture(_:)` completes the quest with the given image, skipping the verifier.
     public var debugBypassCamera = false
+    /// Demo mode (set by `FogServices` from `DebugSettings.isDemoCameraActive`): the camera still only
+    /// unlocks in range, but `capture(_:)` skips the verifier. It "checks" for `demoVerifyDuration`, then
+    /// succeeds with a sticker cut from the photo. Nothing is sent to the server; no attempt is used.
+    public var demoAutoSuccess = false
+    /// How long the demo pretends to verify (the photo shimmers this long).
+    public var demoVerifyDuration: Duration = .seconds(3)
+    /// The demo photo's subject, already cut out (the app bundles it). Used for the demo sticker instead
+    /// of on-device subject lifting, which can't run in the iOS Simulator.
+    public var demoSticker: CGImage?
     /// True when the camera may be used (Q-5).
     public var canCapture: Bool {
         if debugBypassCamera { return quest != nil && state != .verifying }
@@ -129,6 +138,10 @@ public final class QuestCaptureModel {
             await completeWithoutVerification(sticker: photo, quest: quest)
             return
         }
+        if demoAutoSuccess {
+            await completeDemo(photo: photo, quest: quest)
+            return
+        }
         guard let here = lastCoordinate else { return }
         state = .verifying
         let capturedAt = clock()
@@ -186,6 +199,26 @@ public final class QuestCaptureModel {
         var sticker = Sticker(questID: UUID(), category: quest.category, questDate: quest.date,
                               location: quest.target, placeName: quest.placeName,
                               hint: Self.debugStickerHint, collectedAt: clock())
+        sticker.localImageURL = try? await stickerCache.upload(png: png, questID: sticker.id)
+        state = .success(sticker)
+        onSuccess?(sticker, quest)
+    }
+
+    /// Demo mode: a real photo, so the sticker is cut out of it like a real find; then a fixed pause in
+    /// place of the verifier, and success. Each run gets a fresh quest id so repeat demos add new stickers.
+    private func completeDemo(photo: CGImage, quest: Quest) async {
+        state = .verifying
+        let preset = demoSticker
+        async let lifted = preset == nil ? extractor.extractSticker(from: photo) : nil
+        try? await Task.sleep(for: demoVerifyDuration)
+        guard let cutout = await lifted ?? preset,
+              let png = ImageEncoding.png(ImageEncoding.downscaled(cutout, maxDimension: 512)) else {
+            state = .error("Couldn't process the demo photo.")
+            return
+        }
+        var sticker = Sticker(questID: UUID(), category: quest.category, questDate: quest.date,
+                              location: quest.target, placeName: quest.placeName,
+                              hint: quest.hint, collectedAt: clock())
         sticker.localImageURL = try? await stickerCache.upload(png: png, questID: sticker.id)
         state = .success(sticker)
         onSuccess?(sticker, quest)

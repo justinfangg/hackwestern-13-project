@@ -79,7 +79,7 @@ public final class FogServices {
         profile = ProfileModel(api: api, history: history,
                                localStickerStore: JSONFileStore(filename: "local-stickers.json", directory: storageDirectory))
         leaderboard = LeaderboardModel(api: api)
-        feed = FeedModel(api: api)
+        feed = FeedModel(api: api, localStore: JSONFileStore(filename: "local-feed.json", directory: storageDirectory))
 
         wire()
         applyDebugSettings()
@@ -130,9 +130,11 @@ public final class FogServices {
     private func wire() {
         let sync = self.sync, history = self.history, expeditions = self.expeditions
         let pipeline = self.pipeline, quests = self.quests, profile = self.profile, feed = self.feed
+        let debug = self.debug
 
-        pipeline.onTilesCleared = { sync.enqueue(tiles: $0) }
-        pipeline.onPing = { sync.enqueue(ping: $0) }
+        // Demo mode walks are simulated: their tiles, route and session stay on this device.
+        pipeline.onTilesCleared = { if !debug.isDemoCameraActive { sync.enqueue(tiles: $0) } }
+        pipeline.onPing = { if !debug.isDemoCameraActive { sync.enqueue(ping: $0) } }
         // Batches with pings for the running expedition must carry its current record (docs/api.md §2).
         sync.activeExpedition = { [weak expeditions] in
             expeditions?.active.map {
@@ -141,8 +143,20 @@ public final class FogServices {
             }
         }
 
-        expeditions.onEnd = { summary in
+        expeditions.onEnd = { [weak profile] summary in
             history.add(summary)
+            if debug.isDemoCameraActive {
+                // Never sent to Supabase; shown in this device's feed instead.
+                let find = summary.sticker.flatMap { s in
+                    (s.localImageURL ?? s.imageURL).map { FeedPost.Find(url: $0, category: s.category, placeName: s.placeName) }
+                }
+                let me = FeedPost.Author(id: profile?.remote?.userId ?? UUID(),
+                                         name: profile?.username ?? "You", isMe: true)
+                feed.addLocalPost(.local(id: summary.id, author: me, startedAt: summary.startedAt,
+                                         endedAt: summary.endedAt, distanceM: summary.distanceMeters,
+                                         newTiles: summary.newTiles, segments: summary.segments, sticker: find))
+                return
+            }
             sync.enqueue(expedition: summary)
             // Once the session reaches the server it's a post in the feed.
             Task {
@@ -165,6 +179,7 @@ public final class FogServices {
         location.setSimulating(debug.isSimulatorEnabled)
         questCapture.verifier = debug.useOnDeviceVerifier ? onDeviceVerifier : remoteVerifier
         questCapture.debugBypassCamera = debug.isQuestCameraBypassActive
+        questCapture.demoAutoSuccess = debug.isDemoCameraActive
     }
 
     private func observeDebugSettings() {
@@ -172,6 +187,7 @@ public final class FogServices {
             _ = debug.isSimulatorEnabled
             _ = debug.useOnDeviceVerifier
             _ = debug.isQuestCameraBypassActive
+            _ = debug.isDemoCameraActive
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.applyDebugSettings()

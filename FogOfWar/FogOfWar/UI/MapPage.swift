@@ -18,7 +18,15 @@ struct MapPage: View {
     @State private var isFollowingUser = true
     @State private var isQuestSheetExpanded = false
     @State private var showDebug = false
-    @State private var showProfile = false
+    /// The open profile sheet. Carries the sticker to place so the page is built with it (a
+    /// separate state set just before presenting can reach the sheet a frame late, as nil).
+    @State private var profileSheet: ProfileSheet?
+
+    private struct ProfileSheet: Identifiable {
+        let id = UUID()
+        /// A sticker just collected: the profile board places it with an animation when it opens.
+        var placingStickerID: String? = nil
+    }
     /// Reverse-geocoded city for the name at the top of the map.
     @State private var coverage = CityCoverage()
     /// The active-quest card is showing its camera face.
@@ -57,10 +65,12 @@ struct MapPage: View {
             .frame(width: fullSize.width, height: fullSize.height)
             .overlay(alignment: .top) { topFade }
             // Debug joystick sits under the card/sheet so they cover it as they grow.
-            .overlay(alignment: .leading) {
+            // Centered at the bottom, just above the Quests pill (or the quest card).
+            .overlay(alignment: .bottom) {
                 if services.debug.isSimulatorEnabled {
                     JoystickView(simulator: services.location.simulator)
-                        .padding(.leading, 24)
+                        .padding(.bottom, bottomChromeHeight + 24)
+                        .animation(MainView.questTransition, value: isOnQuest)
                         .opacity(isQuestSheetExpanded || isCameraOpen ? 0 : 1)
                         .allowsHitTesting(!isQuestSheetExpanded && !isCameraOpen)
                         .animation(.smooth, value: isCameraOpen)
@@ -71,9 +81,9 @@ struct MapPage: View {
             .overlay(alignment: .top) { topBar }
             .animation(.smooth, value: isCameraOpen)
             .animation(.smooth, value: isQuestSheetExpanded)
-            .sheet(isPresented: $showProfile) {
+            .sheet(item: $profileSheet) { sheet in
                 GeometryReader { proxy in
-                    ProfilePage(contentHeight: proxy.size.height)
+                    ProfilePage(contentHeight: proxy.size.height, placingStickerID: sheet.placingStickerID)
                 }
                 .presentationDragIndicator(.visible)
                 .presentationBackground(SideQuestDesign.profileSurface)
@@ -104,8 +114,18 @@ struct MapPage: View {
                 }
                 services.location.simulator.boost = SimulatedLocationProvider.debugBoost // walking speed is hard to see while testing
                 #endif
+                // Demo mode walks at boost speed on a device too.
+                if services.debug.isDemoCameraActive {
+                    services.location.simulator.boost = SimulatedLocationProvider.debugBoost
+                }
                 _ = await permissions.requestWhenInUse()
                 services.start()
+            }
+            // Demo mode's sticker is the bundled cut-out (no subject lifting in the Simulator).
+            .onChange(of: services.debug.isDemoCameraActive, initial: true) { _, active in
+                #if DEBUG
+                services.questCapture.demoSticker = active ? DemoQuestPhoto.sticker : nil
+                #endif
             }
     }
 
@@ -240,7 +260,7 @@ struct MapPage: View {
                 .accessibilityLabel(cityName.map { "Exploring \($0)" } ?? "Finding your city")
                 .animation(.smooth, value: cityName)
 
-            Button { showProfile = true } label: {
+            Button { profileSheet = ProfileSheet() } label: {
                 Image("ProfileAvatar")
                     .resizable()
                     .frame(width: 40, height: 40)
@@ -304,6 +324,7 @@ struct MapPage: View {
                     onCapture: captureFromCard,
                     onPhoto: submitPhoto,
                     debugPhoto: debugPhoto,
+                    demoPhoto: demoPhoto,
                     resultFace: questPhoto.map { resultFace(for: $0, quest: quest) },
                     resultHeight: isResultExpanded ? resultCardHeight : cameraCardHeight
                 )
@@ -460,7 +481,9 @@ struct MapPage: View {
                 expedition: expeditionSnapshot,
                 onRetry: retryPhoto,
                 onClose: closeResult,
-                onFinish: finishQuest
+                onFinish: finishQuest,
+                onDone: finishQuestOnProfile,
+                presetCutout: demoCutout(for: photo.image)
             )
             .id(photo.id)
         )
@@ -499,6 +522,18 @@ struct MapPage: View {
         services.expeditions.dismissSummary()
     }
 
+    /// "Done" on the sticker stats: ends the quest like closing them, then opens the profile once
+    /// the card has slid away, where the new sticker is placed onto the board.
+    private func finishQuestOnProfile() {
+        var stickerID: String?
+        if case .success(let sticker) = services.questCapture.state { stickerID = sticker.id.uuidString }
+        finishQuest()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            profileSheet = ProfileSheet(placingStickerID: stickerID)
+        }
+    }
+
     /// The quest's walk so far, as the sticker stats show it.
     private func expeditionSnapshot() -> ExpeditionSummary? {
         guard let active = services.expeditions.active else { return nil }
@@ -512,6 +547,25 @@ struct MapPage: View {
             segments: active.segments.filter { !$0.isEmpty },
             sticker: active.sticker
         )
+    }
+
+    /// Demo mode's bundled cut-out, when `photo` is its sample photo; nil otherwise.
+    private func demoCutout(for photo: CGImage) -> SubjectCutout? {
+        #if DEBUG
+        guard let demo = DemoQuestPhoto.image, photo === demo else { return nil }
+        return DemoQuestPhoto.cutout
+        #else
+        return nil
+        #endif
+    }
+
+    /// Demo mode's sample photo for the camera; always nil in release builds.
+    private var demoPhoto: CGImage? {
+        #if DEBUG
+        services.debug.isDemoCameraActive ? DemoQuestPhoto.image : nil
+        #else
+        nil
+        #endif
     }
 
     /// Debug bypass photo source; always nil in release builds.

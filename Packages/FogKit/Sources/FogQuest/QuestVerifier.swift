@@ -32,6 +32,7 @@ public actor OnDeviceQuestVerifier: QuestVerifying {
         "mural": ["mural", "graffiti", "painting", "art"],
         "statue": ["statue", "sculpture", "monument"],
         "mailbox": ["mailbox", "postbox", "mail"],
+        "flower": ["flower", "daisy", "rose", "tulip", "sunflower", "lily", "orchid", "petal", "blossom"],
         "chair": ["chair", "armchair", "folding_chair", "rocking_chair", "office_chair", "seat"],
     ]
 

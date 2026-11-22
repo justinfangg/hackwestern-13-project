@@ -35,6 +35,11 @@ struct QuestResultView: View {
     let onClose: () -> Void
     /// The sticker stats were closed: the quest is done.
     let onFinish: () -> Void
+    /// "Done" on the sticker stats: the quest is done and the sticker goes onto the profile board.
+    let onDone: () -> Void
+    /// The photo's subject already cut out, in place (Demo mode's bundled flower). Used instead of
+    /// on-device subject lifting, which can't run in the iOS Simulator.
+    var presetCutout: SubjectCutout? = nil
 
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -392,7 +397,8 @@ struct QuestResultView: View {
             sticker: stats.sticker,
             expedition: stats.expedition,
             date: stats.date,
-            onDismiss: onFinish
+            onDismiss: onFinish,
+            footerInset: Self.buttonInset + Self.buttonHeight
         )
         .opacity(isStatsShown ? 1 : 0)
         .blur(radius: isStatsShown ? 0 : Self.fadeBlur)
@@ -411,6 +417,16 @@ struct QuestResultView: View {
                 height: 14
             )
         )
+        .allowsHitTesting(isStatsShown)
+
+        VStack {
+            Spacer(minLength: 0)
+            pillButton("Done", fill: SideQuestDesign.canvas, text: .white, action: onDone)
+                .accessibilityHint("Adds the sticker to your profile board")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .opacity(isStatsShown ? 1 : 0)
+        .offset(y: isStatsShown ? 0 : 24)
         .allowsHitTesting(isStatsShown)
     }
 
@@ -453,7 +469,7 @@ struct QuestResultView: View {
     // MARK: Sequence
 
     private func run() async {
-        let staged = await StagedPhoto.make(from: photo)
+        let staged = await StagedPhoto.make(from: photo, presetCutout: presetCutout)
         self.staged = staged
         try? await Task.sleep(for: .milliseconds(40))
         withAnimation(Self.shrink) { isShrunk = true }
@@ -578,9 +594,12 @@ nonisolated struct StagedPhoto: @unchecked Sendable {
     /// Set when the photo was a pre-cut sticker: the object, in place in `cgImage`.
     let presetCutout: SubjectCutout?
 
-    static func make(from source: CGImage) async -> StagedPhoto {
+    static func make(from source: CGImage, presetCutout: SubjectCutout? = nil) async -> StagedPhoto {
         await Task.detached(priority: .userInitiated) {
             let base = ImageEncoding.downscaled(source, maxDimension: 1024)
+            if let presetCutout {
+                return StagedPhoto(photo: UIImage(cgImage: base), cgImage: base, presetCutout: presetCutout)
+            }
             guard VisionStickerExtractor.hasTransparentBackground(base),
                   let staged = stage(base) else {
                 return StagedPhoto(photo: UIImage(cgImage: base), cgImage: base, presetCutout: nil)

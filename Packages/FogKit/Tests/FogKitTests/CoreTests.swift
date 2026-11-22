@@ -93,3 +93,42 @@ import Testing
         #expect(relaunched.stickers.first?.localImageURL?.lastPathComponent == "a.png")
     }
 }
+
+@Suite @MainActor struct LocalFeedTests {
+    @Test func localPostsMergeNewestFirstAndSurviveRelaunch() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = JSONFileStore<[FeedPost]>(filename: "local-feed.json", directory: dir)
+        let feed = FeedModel(api: MockFogAPI(latency: .zero), pageSize: 4, localStore: store)
+        await feed.refresh()
+        let start = Coordinate(latitude: 43.0096, longitude: -81.2737)
+        let post = FeedPost.local(
+            id: UUID(), author: .init(id: UUID(), name: "You", isMe: true),
+            startedAt: .now.addingTimeInterval(-60), endedAt: .now.addingTimeInterval(3600),
+            distanceM: 500, newTiles: 3,
+            segments: [[start, Geo.offset(start, north: 200, east: 0), Geo.offset(start, north: 200, east: 100)]],
+            sticker: nil)
+        feed.addLocalPost(post)
+        #expect(feed.posts.first?.id == post.id)
+        #expect(feed.posts.count == feed.serverPosts.count + 1)
+        #expect(post.durationS == 3660)
+
+        let shape = try #require(post.routeShape)
+        #expect(shape.count == 3)
+        #expect(shape.allSatisfy { (0 ... 1).contains($0.x) && (0 ... 1).contains($0.y) })
+        #expect(shape[0].y > shape[1].y) // north is up
+
+        let relaunched = FeedModel(api: MockFogAPI(latency: .zero), localStore: store)
+        #expect(relaunched.localPosts.map(\.id) == [post.id])
+
+        // A sticker saved under an old app container path is found again in the current folder.
+        let stickers = dir.appendingPathComponent("stickers", isDirectory: true)
+        try FileManager.default.createDirectory(at: stickers, withIntermediateDirectories: true)
+        try Data([1]).write(to: stickers.appendingPathComponent("s.png"))
+        var moved = post
+        moved.sticker = .init(url: URL(fileURLWithPath: "/old/container/stickers/s.png"), category: "tree", placeName: nil)
+        feed.addLocalPost(moved)
+        let again = FeedModel(api: MockFogAPI(latency: .zero), localStore: store)
+        #expect(again.localPosts.first?.sticker?.url == stickers.appendingPathComponent("s.png"))
+    }
+}

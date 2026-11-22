@@ -11,6 +11,8 @@ struct QuestCameraView: View {
     let onPhoto: (CGImage) -> Void
     /// Debug bypass: when set, the shutter works regardless of camera state and submits this image.
     var debugPhoto: (() -> CGImage?)? = nil
+    /// Demo mode: the viewfinder shows this photo instead of the camera, and the shutter captures it.
+    var demoPhoto: CGImage? = nil
 
     @State private var status: Status = .starting
     @State private var isCapturing = false
@@ -42,7 +44,7 @@ struct QuestCameraView: View {
         .overlay(alignment: .topTrailing) { closeButton }
         .overlay(alignment: .bottom) { shutter }
         .sensoryFeedback(.impact(weight: .medium), trigger: shutterCount)
-        .task { await startCamera() }
+        .task { if demoPhoto == nil { await startCamera() } }
         .onDisappear { camera.stop() }
     }
 
@@ -50,6 +52,23 @@ struct QuestCameraView: View {
 
     @ViewBuilder
     private var feed: some View {
+        if let demoPhoto {
+            // Demo mode: a still "viewfinder" of the sample photo.
+            GeometryReader { proxy in
+                Image(decorative: demoPhoto, scale: 1)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+            }
+            .accessibilityLabel("Camera viewfinder (demo photo)")
+        } else {
+            liveFeed
+        }
+    }
+
+    @ViewBuilder
+    private var liveFeed: some View {
         switch status {
         case .live:
             CameraPreview(session: camera.session)
@@ -139,7 +158,7 @@ struct QuestCameraView: View {
             .contentShape(Circle())
         }
         .buttonStyle(ShutterButtonStyle())
-        .disabled(isCapturing || (debugPhoto == nil && (status == .starting || status == .denied)))
+        .disabled(isCapturing || (debugPhoto == nil && demoPhoto == nil && (status == .starting || status == .denied)))
         .accessibilityLabel("Take photo")
         .padding(.bottom, 33)
     }
@@ -164,6 +183,11 @@ struct QuestCameraView: View {
 
         if let image = debugPhoto?() {
             onPhoto(image)
+            return
+        }
+
+        if let demoPhoto {
+            onPhoto(demoPhoto)
             return
         }
 

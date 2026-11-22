@@ -15,6 +15,9 @@ struct StickerBoard: View {
     var label: String
     /// Hidden while it's shown elsewhere (the stats view's flying hero).
     var hiddenStickerID: String? = nil
+    /// A sticker just collected: it appears lifted above its spot, then presses down onto the board.
+    var placingStickerID: String? = nil
+    var onPlaced: () -> Void = {}
     /// Tapped sticker and where it is on screen (center in global coordinates).
     var onSelect: (BoardSticker, StickerPlacement) -> Void = { _, _ in }
 
@@ -68,6 +71,17 @@ struct StickerBoard: View {
     @State private var grabDirection = CGVector(dx: 0, dy: -1)
     @State private var liftCount = 0
     @State private var dropCount = 0
+    /// Where `placingStickerID` is in its drop onto the board.
+    @State private var placing: Placing = .waiting
+
+    private enum Placing {
+        /// Not shown yet (the sheet is still sliding up).
+        case waiting
+        /// Floating above its spot, peeled up like a sticker held by an edge.
+        case hovering
+        /// Pressed down: a normal sticker again.
+        case placed
+    }
     @GestureState private var isTouchingSticker = false
 
     // Camera
@@ -133,6 +147,7 @@ struct StickerBoard: View {
             .simultaneousGesture(magnifyGesture)
             .onAppear { boardSize = size }
             .onChange(of: size) { boardSize = size }
+            .task(id: placingStickerID) { await placeNewSticker() }
             .onGeometryChange(for: CGPoint.self) { $0.frame(in: .global).origin } action: { boardOrigin = $0 }
             .accessibilityElement(children: .contain)
             .accessibilityZoomAction { action in
@@ -161,10 +176,15 @@ struct StickerBoard: View {
                 let placement = store.placement(for: sticker, order: index)
                 let isLifted = touch == .lifted(sticker.id)
                 let center = worldCenter(of: placement)
+                let phase: Placing = sticker.id == placingStickerID ? placing : .placed
 
                 StickerArt(sticker: sticker)
                     .rotationEffect(.degrees(sticker.rotation))
-                    .modifier(PeelEffect(isLifted: isLifted, direction: grabDirection))
+                    .modifier(PeelEffect(isLifted: isLifted || phase != .placed, direction: grabDirection))
+                    // Arrives from above the board, a little large, then is pressed down.
+                    .scaleEffect(phase == .waiting ? 1.35 : (phase == .hovering ? 1.12 : 1))
+                    .offset(y: phase == .waiting ? -60 : (phase == .hovering ? -10 : 0))
+                    .opacity(phase == .waiting ? 0 : 1)
                     .gesture(stickerGesture(for: sticker, viewCenter: cam.view(center)))
                     .accessibilityElement()
                     .accessibilityLabel("\(sticker.accessibilityName) sticker")
@@ -176,7 +196,7 @@ struct StickerBoard: View {
                         x: center.x + (isLifted ? dragOffset.width : 0),
                         y: center.y + (isLifted ? dragOffset.height : 0)
                     )
-                    .zIndex(Double(placement.z) + (isLifted ? 10_000 : 0))
+                    .zIndex(Double(placement.z) + (isLifted || phase != .placed ? 10_000 : 0))
             }
         }
         .frame(
@@ -186,6 +206,29 @@ struct StickerBoard: View {
         )
         .scaleEffect(cam.scale, anchor: .topLeading)
         .offset(cam.offset)
+    }
+
+    /// Drops `placingStickerID` onto the board: it fades in floating above its spot, hangs for a
+    /// beat, then presses down with a bounce and a tap of haptics, and ends up on top of the pile.
+    private func placeNewSticker() async {
+        guard let id = placingStickerID, let sticker = stickers.first(where: { $0.id == id }) else {
+            placing = .waiting
+            return
+        }
+        placing = .waiting
+        store.bringToFront(sticker, among: stickers)
+        grabDirection = CGVector(dx: 0, dy: 1)
+        // Let the profile sheet finish sliding up first.
+        try? await Task.sleep(for: .milliseconds(450))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.35)) { placing = .hovering }
+        liftCount += 1
+        try? await Task.sleep(for: .milliseconds(650))
+        guard !Task.isCancelled else { return }
+        withAnimation(.spring(duration: 0.4, bounce: 0.4)) { placing = .placed }
+        dropCount += 1
+        try? await Task.sleep(for: .milliseconds(400))
+        onPlaced()
     }
 
     private var monthLabel: some View {

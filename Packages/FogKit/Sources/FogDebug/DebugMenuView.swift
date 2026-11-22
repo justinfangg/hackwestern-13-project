@@ -29,6 +29,16 @@ public struct DebugMenuView: View {
 
     public var body: some View {
         Form {
+            Section {
+                Toggle("Demo mode", isOn: Binding(
+                    get: { settings.demoMode },
+                    set: { on in
+                        settings.demoMode = on
+                        if on { simulator.boost = SimulatedLocationProvider.debugBoost }
+                    }))
+            } footer: {
+                Text("Turns on simulated location and boost. Walk within range of a quest, open the camera, and its viewfinder shows a sample photo. Capture \"checks\" it for 3 seconds without calling Gemini, then the quest succeeds. Debug builds only.")
+            }
             Section("Simulator Mode") {
                 Toggle("Use simulated location", isOn: $settings.isSimulatorEnabled)
                 if settings.isSimulatorEnabled {

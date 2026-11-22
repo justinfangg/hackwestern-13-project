@@ -112,6 +112,8 @@ struct StickerStatsView: View {
     /// When the sticker was collected; shown small at the bottom of the page.
     let date: Date?
     let onDismiss: () -> Void
+    /// Height kept clear at the bottom for a caller's button (the quest's "Done"); the date sits above it.
+    var footerInset: CGFloat = 0
 
     private static let ink = Color(red: 0x3B / 255, green: 0x3B / 255, blue: 0x3B / 255)
 
@@ -175,7 +177,7 @@ struct StickerStatsView: View {
             }
             .overlay(alignment: .bottom) {
                 dateLabel
-                    .padding(.bottom, max(proxy.safeAreaInsets.bottom, 20) + 8)
+                    .padding(.bottom, max(proxy.safeAreaInsets.bottom, 20) + 8 + footerInset)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
             .clipped()

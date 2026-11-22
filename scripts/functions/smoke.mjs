@@ -172,6 +172,22 @@ try {
   check((await call(token, "leaderboard", { query: "?area=nowhere&metric=time" })).json.error?.code === "area_not_found",
     "leaderboard unknown area -> area_not_found");
 
+  // ---- city leaderboard by period (current app)
+  r = await call(token, "leaderboard", { query: `?lat=${TARGET.lat}&lng=${TARGET.lng}&metric=percent&period=day` });
+  const cityMe = r.json.entries?.find((e) => e.is_me);
+  check(r.status === 200 && r.json.area?.kind === "city" && r.json.area?.name === "London" && r.json.period === "day"
+        && cityMe?.name === name && Math.abs(cityMe.value - 100 * 2 / r.json.area.total_tiles) < 0.001,
+    "city leaderboard (day, percent): London, my 2 tiles ranked", `rank ${cityMe?.rank} of ${r.json.total_players}, ${cityMe?.value}%`);
+  check(Math.abs(r.json.mine?.distance_m - 30) < 1.5 && r.json.mine?.time_s === 21 && r.json.mine?.percent > 0,
+    "city leaderboard: my numbers for all three metrics", JSON.stringify(r.json.mine));
+  r = await call(token, "leaderboard", { query: `?lat=${TARGET.lat}&lng=${TARGET.lng}&metric=distance&period=month` });
+  check(r.status === 200 && r.json.metric === "distance" && r.json.me?.name === name && Date.parse(r.json.period_start) <= Date.now(),
+    "city leaderboard (month, distance) includes me", `rank ${r.json.me?.rank}, since ${r.json.period_start}`);
+  r = await call(token, "leaderboard", { query: "?lat=0&lng=0&metric=time&period=week" });
+  check(r.status === 200 && r.json.area === null && r.json.entries.length === 0, "city leaderboard far from any city -> area null");
+  check((await call(token, "leaderboard", { query: `?lat=${TARGET.lat}&lng=${TARGET.lng}&metric=time&period=year` })).json.error?.code
+    === "invalid_request", "city leaderboard bad period -> invalid_request");
+
   // ---- feed (runs last: adds a second expedition)
   r = await call(token, "feed", { query: "?limit=50" });
   check(r.status === 200 && Array.isArray(r.json.posts) && !r.json.posts.some((p) => p.id === expId),

@@ -2,66 +2,56 @@ import Foundation
 import Observation
 import FogCore
 
-/// Territory leaderboards (docs/api.md §7): pick an area and a metric, see the ranking.
-/// The leaderboard page reads `areas`, `selectedArea`, `metric`, `board`; calls `load(near:)`,
-/// `select(area:)` and `select(metric:)`.
+/// The city leaderboard (docs/api.md §7): everyone in the city you're in, ranked by % explored,
+/// time or distance over today, this week or this month. The leaderboard page reads `board`,
+/// `metric`, `period`; calls `load(near:)`, `select(metric:)` and `select(period:)`.
 @MainActor
 @Observable
 public final class LeaderboardModel {
-    public private(set) var areas: [TerritoryArea] = []
-    public private(set) var selectedAreaID: String?
     public private(set) var metric: LeaderboardMetric = .percent
-    public private(set) var board: LeaderboardResponse?
+    public private(set) var period: LeaderboardPeriod = .week
+    public private(set) var board: CityLeaderboardResponse?
     public private(set) var isLoading = false
     public private(set) var lastError: String?
 
     @ObservationIgnored private let api: FogAPI
+    @ObservationIgnored private var location: Coordinate?
     @ObservationIgnored private var loadToken = UUID()
 
     public init(api: FogAPI) { self.api = api }
 
-    public var selectedArea: TerritoryArea? { areas.first { $0.id == selectedAreaID } }
+    /// The city the board is for (nil before loading, or when you're not near a city).
+    public var city: LeaderboardResponse.Area? { board?.area }
 
-    /// Loads the areas (nearest first) and the ranking for the selected (or nearest) area.
+    /// Loads the board for the city around `location`.
     public func load(near location: Coordinate?, metric: LeaderboardMetric? = nil) async {
         if let metric { self.metric = metric }
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            areas = try await api.leaderboardAreas(near: location).areas
-            if selectedAreaID == nil || !areas.contains(where: { $0.id == selectedAreaID }) {
-                selectedAreaID = areas.first?.id
-            }
-            lastError = nil
-        } catch {
-            lastError = String(describing: error)
-            return
-        }
-        await refreshBoard()
-    }
-
-    public func select(area id: String) async {
-        guard id != selectedAreaID else { return }
-        selectedAreaID = id
-        await refreshBoard()
+        if let location { self.location = location }
+        await refresh()
     }
 
     public func select(metric: LeaderboardMetric) async {
         guard metric != self.metric else { return }
         self.metric = metric
-        await refreshBoard()
+        await refresh()
     }
 
-    /// Re-fetches the ranking; ignores responses that arrive after a newer selection.
-    public func refreshBoard() async {
-        guard let area = selectedAreaID else { board = nil; return }
+    public func select(period: LeaderboardPeriod) async {
+        guard period != self.period else { return }
+        self.period = period
+        await refresh()
+    }
+
+    /// Re-fetches; ignores responses that arrive after a newer selection.
+    public func refresh() async {
         let token = UUID()
         loadToken = token
-        let metric = self.metric
+        let (metric, period) = (self.metric, self.period)
+        let here = location ?? .westernCampus
         isLoading = true
         defer { if loadToken == token { isLoading = false } }
         do {
-            let result = try await api.leaderboard(area: area, metric: metric)
+            let result = try await api.cityLeaderboard(near: here, metric: metric, period: period)
             guard loadToken == token else { return }
             board = result
             lastError = nil

@@ -306,15 +306,18 @@ final class AuthStubURLProtocol: URLProtocol, @unchecked Sendable {
 }
 
 @Suite @MainActor struct LeaderboardModelTests {
-    @Test func loadsNearestAreaThenSwitchesMetricAndArea() async {
+    @Test func loadsTheCityThenSwitchesMetricAndPeriod() async {
         let model = LeaderboardModel(api: MockFogAPI(latency: .zero))
         await model.load(near: .westernCampus)
-        #expect(model.areas.count == 3 && model.selectedArea?.id == "western-campus")
-        #expect(model.board?.metric == .percent && model.board?.me?.isMe == true)
+        #expect(model.city?.name == "London" && model.period == .week && model.metric == .percent)
+        #expect(model.board?.me?.isMe == true && (model.board?.mine.distanceM ?? 0) > 0)
+        let weekDistance = model.board?.mine.distanceM ?? 0
+
         await model.select(metric: .distance)
-        #expect(model.board?.metric == .distance && model.board?.me?.value == 6_874)
-        await model.select(area: "downtown-london")
-        #expect(model.board?.area.id == "downtown-london" && model.board?.me == nil)   // no score there yet
+        #expect(model.board?.metric == .distance && model.board?.me?.value == weekDistance)
+        await model.select(period: .day)
+        #expect(model.board?.period == .day && (model.board?.mine.distanceM ?? 0) < weekDistance)
+        #expect(model.board?.metric == .distance)
         #expect(model.lastError == nil && !model.isLoading)
     }
 
@@ -322,6 +325,17 @@ final class AuthStubURLProtocol: URLProtocol, @unchecked Sendable {
         let model = LeaderboardModel(api: MockFogAPI(latency: .zero))
         await model.load(near: nil, metric: .time)
         #expect(model.board?.metric == .time)
+    }
+
+    @Test func cityBoardDecodes() throws {
+        let r = try JSONCoding.decoder.decode(CityLeaderboardResponse.self, from: mockData("leaderboard-city.200.json"))
+        #expect(r.area?.kind == "city" && r.period == .week && r.metric == .distance && r.totalPlayers == 3)
+        #expect(r.me?.isMe == true && r.me?.rank == 2 && r.mine.timeS == 1_860)
+        let none = try JSONCoding.decoder.decode(CityLeaderboardResponse.self, from: Data("""
+            { "area": null, "metric": "time", "period": "day", "period_start": "2026-11-22T05:00:00Z", "total_players": 0,
+              "entries": [], "me": null, "mine": { "percent": 0, "time_s": 0, "distance_m": 0 } }
+            """.utf8))
+        #expect(none.area == nil && none.entries.isEmpty)
     }
 }
 

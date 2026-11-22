@@ -45,6 +45,8 @@ public protocol FogAPI: Sendable {
     func leaderboardAreas(near location: Coordinate?) async throws -> LeaderboardAreasResponse
     /// Ranking for one area and metric (§7).
     func leaderboard(area: String, metric: LeaderboardMetric) async throws -> LeaderboardResponse
+    /// The leaderboard for the city around `location`, over today / this week / this month (§7).
+    func cityLeaderboard(near location: Coordinate, metric: LeaderboardMetric, period: LeaderboardPeriod) async throws -> CityLeaderboardResponse
     /// Finished sessions from everyone, newest first (§8). `before` pages back from `nextBefore`.
     func feed(before: Date?, limit: Int) async throws -> FeedResponse
 }
@@ -96,6 +98,16 @@ public final class LiveFogAPI: FogAPI {
     public func leaderboard(area: String, metric: LeaderboardMetric) async throws -> LeaderboardResponse {
         try await call("leaderboard", query: [URLQueryItem(name: "area", value: area),
                                               URLQueryItem(name: "metric", value: metric.rawValue)])
+    }
+
+    public func cityLeaderboard(near location: Coordinate, metric: LeaderboardMetric,
+                                period: LeaderboardPeriod) async throws -> CityLeaderboardResponse {
+        try await call("leaderboard", query: [
+            URLQueryItem(name: "lat", value: String(location.latitude)),
+            URLQueryItem(name: "lng", value: String(location.longitude)),
+            URLQueryItem(name: "metric", value: metric.rawValue),
+            URLQueryItem(name: "period", value: period.rawValue),
+        ])
     }
 
     public func feed(before: Date?, limit: Int) async throws -> FeedResponse {
@@ -320,6 +332,41 @@ public actor MockFogAPI: FogAPI {
         }
         return LeaderboardResponse(area: .init(id: a.id, name: a.name, kind: a.kind, totalTiles: a.totalTiles),
                                    metric: metric, totalPlayers: entries.count, entries: entries, me: me)
+    }
+
+    public func cityLeaderboard(near location: Coordinate, metric: LeaderboardMetric,
+                                period: LeaderboardPeriod) async throws -> CityLeaderboardResponse {
+        try await Task.sleep(for: latency)
+        // Shorter periods: smaller numbers, fewer players.
+        let scale: Double = switch period { case .day: 0.08; case .week: 0.35; case .month: 1 }
+        let base = Self.sampleAreas[0].mine
+        let mine = AreaStats(percent: base.percent / 40 * scale, timeS: (base.timeS * scale).rounded(),
+                             distanceM: (base.distanceM * scale).rounded())
+        let names = ["mapmaker_ana", "trailblazer", "fogbuster", "nightowl_99", "campus_rat", "quietwalker", "leafpeeper"]
+            .prefix(period == .day ? 3 : period == .week ? 5 : 7)
+        let top: Double = (metric == .percent ? 1.2 : metric == .time ? 21_000 : 26_000) * scale
+        var entries = names.enumerated().map { i, n in
+            LeaderboardEntry(rank: i + 1, name: n, value: top * pow(0.72, Double(i)), isMe: false)
+        }
+        let mineValue = mine.value(for: metric)
+        var me: LeaderboardEntry?
+        if mineValue > 0 {
+            let rank = (entries.firstIndex { $0.value < mineValue } ?? entries.count) + 1
+            let row = LeaderboardEntry(rank: rank, name: username ?? "Explorer 0A1B", value: mineValue, isMe: true)
+            entries.insert(row, at: rank - 1)
+            for i in rank..<entries.count { entries[i].rank = i + 1 }
+            me = row
+        }
+        let calendar = Calendar(identifier: .iso8601)
+        let start = switch period {
+        case .day: calendar.startOfDay(for: Date())
+        case .week: calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
+        case .month: calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+        }
+        return CityLeaderboardResponse(
+            area: .init(id: "london", name: "London", kind: "city", totalTiles: 188_209),
+            metric: metric, period: period, periodStart: start, totalPlayers: entries.count,
+            entries: entries, me: me, mine: mine)
     }
 
     /// A wandering walk in the unit square, different for each seed (stands in for `route_shape`).

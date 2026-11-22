@@ -416,6 +416,12 @@ public enum LeaderboardMetric: String, Codable, Sendable, CaseIterable, Identifi
     public var id: String { rawValue }
 }
 
+/// Leaderboard time window, in Toronto calendar terms (weeks start Monday).
+public enum LeaderboardPeriod: String, Codable, Sendable, CaseIterable, Identifiable {
+    case day, week, month
+    public var id: String { rawValue }
+}
+
 public struct AreaStats: Hashable, Codable, Sendable {
     public var percent: Double
     public var timeS: Double
@@ -582,5 +588,33 @@ public struct FeedResponse: Codable, Sendable {
     public init(posts: [FeedPost], nextBefore: Date?) {
         self.posts = posts
         self.nextBefore = nextBefore
+    }
+}
+
+/// The city leaderboard for a period (docs/api.md §7, current app). `area` is the city you're in
+/// (nil when you're not near one).
+public struct CityLeaderboardResponse: Codable, Sendable {
+    public var area: LeaderboardResponse.Area?
+    public var metric: LeaderboardMetric
+    public var period: LeaderboardPeriod
+    public var periodStart: Date
+    public var totalPlayers: Int
+    /// Top 50, best first (ties share a rank).
+    public var entries: [LeaderboardEntry]
+    /// Your row, also when outside the top 50; nil with no score in this metric yet.
+    public var me: LeaderboardEntry?
+    /// Your numbers for all three metrics in this city and period.
+    public var mine: AreaStats
+
+    public init(area: LeaderboardResponse.Area?, metric: LeaderboardMetric, period: LeaderboardPeriod, periodStart: Date,
+                totalPlayers: Int, entries: [LeaderboardEntry], me: LeaderboardEntry?, mine: AreaStats) {
+        self.area = area
+        self.metric = metric
+        self.period = period
+        self.periodStart = periodStart
+        self.totalPlayers = totalPlayers
+        self.entries = entries
+        self.me = me
+        self.mine = mine
     }
 }

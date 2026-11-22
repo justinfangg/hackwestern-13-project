@@ -309,7 +309,7 @@ final class AuthStubURLProtocol: URLProtocol, @unchecked Sendable {
     @Test func loadsTheCityThenSwitchesMetricAndPeriod() async {
         let model = LeaderboardModel(api: MockFogAPI(latency: .zero))
         await model.load(near: .westernCampus)
-        #expect(model.city?.name == "London" && model.period == .week && model.metric == .percent)
+        #expect(model.city?.name == "Western University" && model.period == .week && model.metric == .percent)
         #expect(model.board?.me?.isMe == true && (model.board?.mine.distanceM ?? 0) > 0)
         let weekDistance = model.board?.mine.distanceM ?? 0
 

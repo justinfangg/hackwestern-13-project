@@ -340,11 +340,11 @@ public actor MockFogAPI: FogAPI {
         // Shorter periods: smaller numbers, fewer players.
         let scale: Double = switch period { case .day: 0.08; case .week: 0.35; case .month: 1 }
         let base = Self.sampleAreas[0].mine
-        let mine = AreaStats(percent: base.percent / 40 * scale, timeS: (base.timeS * scale).rounded(),
+        let mine = AreaStats(percent: base.percent * scale, timeS: (base.timeS * scale).rounded(),
                              distanceM: (base.distanceM * scale).rounded())
         let names = ["mapmaker_ana", "trailblazer", "fogbuster", "nightowl_99", "campus_rat", "quietwalker", "leafpeeper"]
             .prefix(period == .day ? 3 : period == .week ? 5 : 7)
-        let top: Double = (metric == .percent ? 1.2 : metric == .time ? 21_000 : 26_000) * scale
+        let top: Double = (metric == .percent ? 41 : metric == .time ? 21_000 : 26_000) * scale
         var entries = names.enumerated().map { i, n in
             LeaderboardEntry(rank: i + 1, name: n, value: top * pow(0.72, Double(i)), isMe: false)
         }
@@ -364,7 +364,7 @@ public actor MockFogAPI: FogAPI {
         case .month: calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
         }
         return CityLeaderboardResponse(
-            area: .init(id: "london", name: "London", kind: "city", totalTiles: 188_209),
+            area: .init(id: "western-campus", name: "Western University", kind: "campus", totalTiles: 858),
             metric: metric, period: period, periodStart: start, totalPlayers: entries.count,
             entries: entries, me: me, mine: mine)
     }

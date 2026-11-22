@@ -234,7 +234,7 @@ Username rules (D1):
 
 ## 7. `GET leaderboard`
 
-**City leaderboard (current app):** `GET leaderboard?lat=<lat>&lng=<lng>&metric=percent|time|distance&period=day|week|month` ([mock](mocks/leaderboard-city.200.json)). Ranks everyone in the city that contains `lat,lng` (or the nearest city within 30 km) over today, this week (Monday start) or this month, in Toronto time:
+**Leaderboard (current app):** `GET leaderboard?lat=<lat>&lng=<lng>&metric=percent|time|distance&period=day|week|month` ([mock](mocks/leaderboard-city.200.json)). Ranks everyone in **one area**, Western University's campus (`western-campus`; override with the `LEADERBOARD_AREA` secret, e.g. `london` for the whole city), when `lat,lng` is within 30 km of it. Periods are today, this week (Monday start) or this month, in Toronto time. (The example shows the city.)
 ```json
 { "metric": "distance", "period": "week", "period_start": "2026-11-17T05:00:00Z",
   "area": { "id": "london", "name": "London", "kind": "city", "total_tiles": 188209 },
@@ -243,9 +243,9 @@ Username rules (D1):
   "me": { "rank": 2, "name": "vishaal", "value": 2410.7, "is_me": true },
   "mine": { "percent": 0.042, "time_s": 1860, "distance_m": 2410.7 } }
 ```
-- `percent` = res 11 tiles you **first cleared in the period** inside the city ÷ the city's `total_tiles`. `time` / `distance` = sums over your GPS pings in the period inside the city boundary.
+- `percent` = res 11 tiles you **first cleared in the period** inside the area ÷ its `total_tiles`. `time` / `distance` = sums over your GPS pings in the period inside the area's boundary.
 - A city's `area_tiles` are res 9 cells (London has ~188k res 11 tiles); a tile is in the city when its res 9 parent is (`public.h3_parent`).
-- `mine` is your numbers for all three metrics (for the metric cards), even with no rank. `area: null` with empty `entries` when you're not near a city.
+- `mine` is your numbers for all three metrics (for the metric cards), even with no rank. `area: null` with empty `entries` when you're more than 30 km away.
 - Errors: `400 invalid_request` (missing `lat`/`lng`, bad `metric` or `period`).
 
 ### Territory areas (older builds)

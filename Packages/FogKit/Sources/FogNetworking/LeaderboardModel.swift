@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import FogCore
 
-/// The city leaderboard (docs/api.md §7): everyone in the city you're in, ranked by % explored,
+/// The leaderboard (docs/api.md §7): everyone at Western University's campus, ranked by % explored,
 /// time or distance over today, this week or this month. The leaderboard page reads `board`,
 /// `metric`, `period`; calls `load(near:)`, `select(metric:)` and `select(period:)`.
 @MainActor

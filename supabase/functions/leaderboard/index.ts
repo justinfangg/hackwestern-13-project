@@ -12,7 +12,10 @@ type Metric = (typeof METRICS)[number];
 const TOP = 50;
 const PERIODS = ["day", "week", "month"] as const;
 type Period = (typeof PERIODS)[number];
-/** Nearest city counts when you're just outside its boundary. */
+/** The one area the app's leaderboard ranks (2026-11-22: Western's campus; was the whole city).
+ *  Any `areas` id works; override with the LEADERBOARD_AREA secret. */
+const LEADERBOARD_AREA = Deno.env.get("LEADERBOARD_AREA") ?? "western-campus";
+/** You see the board when you're within this distance of that area. */
 const CITY_SEARCH_M = 30_000;
 
 Deno.serve(handle(["GET"], async (req) => {
@@ -103,7 +106,7 @@ async function ranking(userId: string, areaId: string, metricParam: string): Pro
 
 // ---------------------------------------------------------------- city leaderboard (current app)
 
-/** The city you're in (or nearest within 30 km), ranked over today / this week / this month. */
+/** The leaderboard area (Western's campus) when you're within 30 km of it, ranked over today / this week / this month. */
 async function cityBoard(userId: string, params: URLSearchParams): Promise<Response> {
   const lat = Number(params.get("lat")), lng = Number(params.get("lng"));
   const metric = params.get("metric") ?? "percent", period = params.get("period") ?? "week";
@@ -119,9 +122,7 @@ async function cityBoard(userId: string, params: URLSearchParams): Promise<Respo
   const [city] = await sql`
     select id, name, kind, total_tiles, cell_res
     from areas
-    where kind = 'city' and extensions.st_dwithin(boundary, ${here}, ${CITY_SEARCH_M})
-    order by extensions.st_distance(boundary, ${here})
-    limit 1`;
+    where id = ${LEADERBOARD_AREA} and extensions.st_dwithin(boundary, ${here}, ${CITY_SEARCH_M})`;
   // Calendar periods in Toronto time; weeks start on Monday.
   const [{ since }] = await sql`
     select date_trunc(${period}, now() at time zone ${TZ}) at time zone ${TZ} as since`;

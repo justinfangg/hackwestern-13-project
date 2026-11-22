@@ -22,7 +22,7 @@ struct MainTabBar: View {
 
     static let height: CGFloat = 53
     /// Gap between the pill's bottom edge and the screen's bottom edge.
-    static let bottomMargin: CGFloat = 14
+    static let bottomMargin: CGFloat = 28
     /// Total vertical space the tab bar takes at the bottom of the screen.
     static var reservedHeight: CGFloat { height + bottomMargin }
 

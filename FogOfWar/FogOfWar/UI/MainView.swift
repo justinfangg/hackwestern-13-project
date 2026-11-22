@@ -36,7 +36,7 @@ struct MainView: View {
         ZStack(alignment: .bottom) {
             SideQuestDesign.canvas
 
-            HStack(spacing: 0) {
+            HStack(spacing: Self.pageGap) {
                 ForEach(MainTab.allCases) { tab in
                     page(tab, size: size, safeArea: safeArea)
                         .frame(width: size.width, height: size.height)
@@ -49,7 +49,7 @@ struct MainView: View {
                 }
             }
             .frame(width: size.width, height: size.height, alignment: .leading)
-            .offset(x: -CGFloat(selection.rawValue) * size.width)
+            .offset(x: -CGFloat(selection.rawValue) * (size.width + Self.pageGap))
             .animation(Self.tabTransition, value: selection)
 
             MainTabBar(selection: tabSelection)
@@ -108,6 +108,9 @@ struct MainView: View {
             }
         }
     }
+
+    /// Dark strip between neighbouring pages while sliding.
+    private static let pageGap: CGFloat = 10
 
     /// Used when sliding between tabs: quick, and settles without overshooting.
     static let tabTransition: Animation = .spring(duration: 0.3, bounce: 0)

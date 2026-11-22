@@ -38,8 +38,11 @@ struct MapPage: View {
     private static let questCardSideMargin: CGFloat = 7
     private static let questCardBottomMargin: CGFloat = 8
 
-    /// A quest is "accepted" while its expedition is recording.
+    /// A session (quest or free explore) is recording. Named for the quest
+    /// layout it drives: full-screen map, tab bar hidden.
     private var isOnQuest: Bool { services.expeditions.active != nil }
+    /// A free run from the Explore button is recording.
+    private var isExploring: Bool { services.expeditions.active?.kind == .explore }
 
     var body: some View {
         map
@@ -110,7 +113,7 @@ struct MapPage: View {
                              ?? services.location.currentCoordinate)?.clCoordinate,
             questMarkers: questMarkers,
             routeSegments: activeRouteSegments,
-            routeColor: UIColor(questStatus == .completed ? SideQuestDesign.questCompleted : SideQuestDesign.questActive),
+            routeColor: UIColor(routeColor),
             mapChromeInsets: mapChromeInsets,
             recenterToken: recenterToken,
             onMapTap: { _ in },
@@ -154,6 +157,11 @@ struct MapPage: View {
         }
     }
 
+    private var routeColor: Color {
+        if isExploring { return SideQuestDesign.accentGreen }
+        return questStatus == .completed ? SideQuestDesign.questCompleted : SideQuestDesign.questActive
+    }
+
     private var questMarkers: [QuestMarkerData] {
         guard let quest = services.quests.today else { return [] }
         return [
@@ -165,7 +173,7 @@ struct MapPage: View {
                 participantCount: services.debug.participantCount(real: quest.foundTodayCount),
                 status: questStatus,
                 // The accepted-quest frame shows only the beacon.
-                showsLabel: !isOnQuest
+                showsLabel: !isOnQuest || isExploring
             )
         ]
     }
@@ -244,7 +252,17 @@ struct MapPage: View {
             bottomFade(height: 111)
             bottomFade(height: 51)
 
-            if isOnQuest, let quest = services.quests.today, let expedition = services.expeditions.active {
+            if let expedition = services.expeditions.active, expedition.kind == .explore {
+                ActiveExploreCard(
+                    startedAt: expedition.startedAt,
+                    distanceMeters: expedition.distanceMeters,
+                    newTiles: expedition.newTiles,
+                    onEnd: endSession
+                )
+                .padding(.horizontal, Self.questCardSideMargin)
+                .padding(.bottom, Self.questCardBottomMargin)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if isOnQuest, let quest = services.quests.today, let expedition = services.expeditions.active {
                 ActiveQuestCard(
                     quest: quest,
                     startedAt: expedition.startedAt,
@@ -264,7 +282,8 @@ struct MapPage: View {
             } else {
                 QuestSheet(
                     maxHeight: fullSize.height / 2 - Self.sheetBottomMargin,
-                    isExpanded: $isQuestSheetExpanded
+                    isExpanded: $isQuestSheetExpanded,
+                    onExplore: startExploring
                 ) {
                     QuestSheetContent(
                         onAccept: acceptQuest,
@@ -286,9 +305,25 @@ struct MapPage: View {
     private func acceptQuest() {
         withAnimation(MainView.questTransition) {
             isQuestSheetExpanded = false
-            services.expeditions.start()
+            services.expeditions.start(kind: .quest)
         }
         recenterToken &+= 1
+    }
+
+    /// Explore button: a free run with no target. Records time, distance,
+    /// route and new tiles like a quest session, and ends with the recap.
+    private func startExploring() {
+        withAnimation(MainView.questTransition) {
+            isQuestSheetExpanded = false
+            services.expeditions.start(kind: .explore)
+        }
+        recenterToken &+= 1
+    }
+
+    private func endSession() {
+        withAnimation(MainView.questTransition) {
+            services.expeditions.end()
+        }
     }
 
     /// The card's capture button doubles as "try again" after a failed photo.

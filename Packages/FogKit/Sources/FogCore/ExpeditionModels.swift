@@ -1,8 +1,17 @@
 import Foundation
 
 /// Everything the recap card (Jonathan) and sync need about a finished expedition (PRD E-2).
+/// What a session was for: walking to the Daily Quest, or free exploring with no target.
+public enum ExpeditionKind: String, Hashable, Codable, Sendable {
+    /// Started by accepting (or photographing) the Daily Quest.
+    case quest
+    /// Free run from the Explore button: records time, distance, route and tiles, no goal.
+    case explore
+}
+
 public struct ExpeditionSummary: Identifiable, Hashable, Codable, Sendable {
     public var id: UUID
+    public var kind: ExpeditionKind
     public var startedAt: Date
     public var endedAt: Date
     public var distanceMeters: Double
@@ -12,15 +21,33 @@ public struct ExpeditionSummary: Identifiable, Hashable, Codable, Sendable {
     /// Sticker collected during this expedition, if the Daily Quest was completed.
     public var sticker: Sticker?
 
-    public init(id: UUID, startedAt: Date, endedAt: Date, distanceMeters: Double, newTiles: Int,
+    public init(id: UUID, kind: ExpeditionKind = .quest, startedAt: Date, endedAt: Date, distanceMeters: Double, newTiles: Int,
                 segments: [[Coordinate]], sticker: Sticker? = nil) {
         self.id = id
+        self.kind = kind
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.distanceMeters = distanceMeters
         self.newTiles = newTiles
         self.segments = segments
         self.sticker = sticker
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, startedAt, endedAt, distanceMeters, newTiles, segments, sticker
+    }
+
+    /// History saved before `kind` existed decodes as `.quest`.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        kind = try c.decodeIfPresent(ExpeditionKind.self, forKey: .kind) ?? .quest
+        startedAt = try c.decode(Date.self, forKey: .startedAt)
+        endedAt = try c.decode(Date.self, forKey: .endedAt)
+        distanceMeters = try c.decode(Double.self, forKey: .distanceMeters)
+        newTiles = try c.decode(Int.self, forKey: .newTiles)
+        segments = try c.decode([[Coordinate]].self, forKey: .segments)
+        sticker = try c.decodeIfPresent(Sticker.self, forKey: .sticker)
     }
 
     public var duration: TimeInterval { endedAt.timeIntervalSince(startedAt) }

@@ -29,6 +29,7 @@ Only work pushed to `main` is counted.
 | Profile page: name, distance, city coverage, sticker board | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
 | Onboarding (username + permission screens) | Jonathan | ⬜ | |
 | Designed expedition recap card | Jonathan | ⬜ (the app still uses Justin's plain `RecapSheet` from `Dev/`) | |
+| **Territory leaderboard** (% / time / distance explored per campus, park, neighbourhood): areas from OSM, `leaderboard` function, `LeaderboardModel`, Leaderboard page opened from Profile | Justin | ✅ locally (smoke 31/31, 67 FogKit tests); ⬜ not yet deployed | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
 | Pitch | Vishaal | ⬜ | |
 
 **What works today:** open `FogOfWar/FogOfWar.xcodeproj` and run on the iPhone Simulator against the **live Supabase backend**. You get anonymous sign-in, today's real campus quest, Jonathan's map UI with Ayman's H3 fog clearing as you drive the joystick, expeditions with a recap, and tiles, GPS fixes and expeditions syncing to the cloud. Photo verification reaches the server but returns "verifier busy" until Gemini is fixed.
@@ -40,6 +41,7 @@ Only work pushed to `main` is counted.
 - Completing a quest no longer clears extra fog (Q-9 removed; §15).
 - Justin's code lives in a local Swift package (`Packages/FogKit`). Ayman's store implements FogKit's `ExplorationClearing` protocol. See `Packages/FogKit/README.md`.
 - No Apple Developer account: sign-in is Supabase anonymous auth (§15).
+- **Territory leaderboards are back in scope** (2026-11-22): per-area rankings by % explored, time and distance (§15, docs/api.md §7).
 
 ### Left to do for the demo
 
@@ -84,7 +86,7 @@ We are building **two core loops and polishing them**, not a wide feature set.
 4. **Profile:** sticker book, path tracing, lifetime stats.
 5. **Demo mode:** joystick and route playback so the demo works on stage without GPS.
 
-**Cut from the hackathon** (moved to §14, Future Ideas): neighbourhood % and leaderboards, Mayor titles, loot crates, badges and titles, guilds and shared maps, satellite map toggle.
+**Cut from the hackathon** (moved to §14, Future Ideas). *Update 2026-11-22: territory leaderboards were added back (see §0).* Neighbourhood % and leaderboards, Mayor titles, loot crates, badges and titles, guilds and shared maps, satellite map toggle.
 
 Rule for the team: if a task isn't on the in-scope list, it waits until the core is polished and the demo has been rehearsed.
 
@@ -617,6 +619,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Database | **Supabase Postgres only** (changed 2026-11-21; briefly planned Tiger Data for the prize track) | One service instead of two. TimescaleDB isn't available on Supabase Postgres 17, so hypertables/continuous aggregates became plain tables and views, which are fine at hackathon scale. The Tiger prize track is no longer targeted |
 | Technical ownership | Vishaal hands all remaining technical work (Edge Functions, cloud setup, prompt, seeding) to Justin and focuses on the pitch | Lets Vishaal focus on the pitch; one person owning both sides of the API removes the biggest integration risk. Vishaal's contract and schema were high quality and are kept as-is |
 | AI verification provider | Gemini instead of Claude | Hack Western provides Gemini credits |
+| Territory leaderboards | Added back to scope: per-area rankings (campus, parks, Downtown) by % explored, time explored and distance explored. Areas from OpenStreetMap; Downtown is a hand-drawn approximation (OSM has no London neighbourhood polygons). Only usernames and totals are shown | Requested by the team; gives the demo a social/competitive angle. Paths and positions stay private |
 | Sign-in | Supabase anonymous sign-in + username; no Sign in with Apple | Nobody on the team has a paid Apple Developer account, which Sign in with Apple requires |
 | Name | Keep "Fog of War IRL" for the hackathon | Says exactly what the app does in a 3-minute pitch |
 

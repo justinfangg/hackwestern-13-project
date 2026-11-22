@@ -34,6 +34,7 @@ public final class FogServices {
     public let quests: QuestService
     public let questCapture: QuestCaptureModel
     public let profile: ProfileModel
+    public let leaderboard: LeaderboardModel
     public let api: FogAPI
     public let usingMockBackend: Bool
     /// Tiles restored from the server at launch (nil until a restore happened).
@@ -75,6 +76,7 @@ public final class FogServices {
                                          stickerCache: LocalStickerStorage(directory: storageDirectory?.appendingPathComponent("stickers")),
                                          location: location)
         profile = ProfileModel(api: api, history: history)
+        leaderboard = LeaderboardModel(api: api)
 
         wire()
         applyDebugSettings()

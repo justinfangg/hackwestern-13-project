@@ -1,0 +1,28 @@
+{
+  "areas": [
+    {
+      "id": "western-campus",
+      "name": "Western University",
+      "kind": "campus",
+      "total_tiles": 858,
+      "distance_from_me_m": 0,
+      "mine": { "percent": 12.4, "time_s": 5340, "distance_m": 6874.2 }
+    },
+    {
+      "id": "gibbons-park",
+      "name": "Gibbons Park",
+      "kind": "park",
+      "total_tiles": 108,
+      "distance_from_me_m": 820,
+      "mine": { "percent": 3.7, "time_s": 610, "distance_m": 840 }
+    },
+    {
+      "id": "downtown-london",
+      "name": "Downtown London",
+      "kind": "neighbourhood",
+      "total_tiles": 903,
+      "distance_from_me_m": 2650,
+      "mine": { "percent": 0, "time_s": 0, "distance_m": 0 }
+    }
+  ]
+}

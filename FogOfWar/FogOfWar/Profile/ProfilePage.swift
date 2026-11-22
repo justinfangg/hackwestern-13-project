@@ -12,6 +12,8 @@ struct ProfilePage: View {
     @Environment(ExplorationStore.self) private var explorationStore
     @State private var coverage = CityCoverage()
     @State private var percentExplored: Double?
+    /// Opens the territory leaderboard on this metric (trophy button or a stat card).
+    @State private var territoryMetric: LeaderboardMetric?
 
     // Figma offsets from the top of the profile container.
     private static let horizontalMargin: CGFloat = 28
@@ -47,6 +49,10 @@ struct ProfilePage: View {
             percentExplored = await coverage.percentExplored(by: explorationStore.clearedCells)
         }
         .task { await services.profile.refresh() }
+        .fullScreenCover(item: $territoryMetric) { metric in
+            LeaderboardPage(initialMetric: metric)
+                .environment(services)
+        }
     }
 
     private var boardHeight: CGFloat {
@@ -75,6 +81,16 @@ struct ProfilePage: View {
 
             Spacer(minLength: 12)
 
+            Button { territoryMetric = .percent } label: {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(SideQuestDesign.questActive)
+                    .frame(width: 50, height: 50)
+                    .background(Circle().fill(SideQuestDesign.primaryText))
+            }
+            .padding(.trailing, 8)
+            .accessibilityLabel("Territory leaderboard")
+
             Image("ProfileAvatar")
                 .resizable()
                 .frame(width: 50, height: 50)
@@ -86,6 +102,7 @@ struct ProfilePage: View {
 
     private var stats: some View {
         HStack(spacing: 18) {
+            Button { territoryMetric = .percent } label: {
             ProfileStatCard(
                 value: Self.percentText(displayedPercent),
                 label: cityName ?? "Your city",
@@ -98,7 +115,11 @@ struct ProfilePage: View {
                     .frame(width: 102, height: 102)
                     .offset(x: -41, y: -6)
             }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the territory leaderboard")
 
+            Button { territoryMetric = .distance } label: {
             ProfileStatCard(
                 value: Self.distanceText(totalDistanceMeters),
                 label: "Traveled",
@@ -111,6 +132,9 @@ struct ProfilePage: View {
                     .frame(width: 69.3332, height: 80.008)
                     .offset(x: -8.67, y: -1.67)
             }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the territory leaderboard")
         }
     }
 

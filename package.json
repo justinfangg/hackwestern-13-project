@@ -13,7 +13,8 @@
     "functions:smoke": "node scripts/functions/smoke.mjs",
     "functions:deploy": "supabase functions deploy",
     "db:seed-quests": "node scripts/db/seed-quests.mjs > supabase/seed/quests.sql && supabase db query --remote -f supabase/seed/quests.sql",
-    "db:seed-demo": "node scripts/db/seed-demo.mjs"
+    "db:seed-demo": "node scripts/db/seed-demo.mjs",
+    "db:seed-areas": "node scripts/db/seed-areas.mjs > supabase/seed/areas.sql && supabase db query --remote -f supabase/seed/areas.sql"
   },
   "engines": {
     "node": ">=22"

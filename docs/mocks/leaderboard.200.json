@@ -1,0 +1,12 @@
+{
+  "area": { "id": "western-campus", "name": "Western University", "kind": "campus", "total_tiles": 858 },
+  "metric": "percent",
+  "total_players": 4,
+  "entries": [
+    { "rank": 1, "name": "mapmaker_ana", "value": 41.2, "is_me": false },
+    { "rank": 2, "name": "trailblazer", "value": 29.6, "is_me": false },
+    { "rank": 3, "name": "vishaal", "value": 12.4, "is_me": true },
+    { "rank": 4, "name": "Explorer 7E62", "value": 4.08, "is_me": false }
+  ],
+  "me": { "rank": 3, "name": "vishaal", "value": 12.4, "is_me": true }
+}

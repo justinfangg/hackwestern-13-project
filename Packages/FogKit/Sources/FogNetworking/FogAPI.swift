@@ -41,6 +41,10 @@ public protocol FogAPI: Sendable {
     func verifyQuest(_ request: VerifyQuestRequest) async throws -> VerifyQuestResponse
     func profile(includeTiles: Bool) async throws -> ProfileResponse
     func setUsername(_ username: String) async throws -> ProfileIdentity
+    /// Territory areas, nearest to `location` first, with the caller's stats (§7).
+    func leaderboardAreas(near location: Coordinate?) async throws -> LeaderboardAreasResponse
+    /// Ranking for one area and metric (§7).
+    func leaderboard(area: String, metric: LeaderboardMetric) async throws -> LeaderboardResponse
 }
 
 extension FogAPI {
@@ -79,6 +83,17 @@ public final class LiveFogAPI: FogAPI {
 
     public func setUsername(_ username: String) async throws -> ProfileIdentity {
         try await call("profile", method: "POST", body: SetUsernameRequest(username: username))
+    }
+
+    public func leaderboardAreas(near location: Coordinate?) async throws -> LeaderboardAreasResponse {
+        try await call("leaderboard", query: location.map {
+            [URLQueryItem(name: "lat", value: String($0.latitude)), URLQueryItem(name: "lng", value: String($0.longitude))]
+        } ?? [])
+    }
+
+    public func leaderboard(area: String, metric: LeaderboardMetric) async throws -> LeaderboardResponse {
+        try await call("leaderboard", query: [URLQueryItem(name: "area", value: area),
+                                              URLQueryItem(name: "metric", value: metric.rawValue)])
     }
 
     // MARK: Plumbing
@@ -223,6 +238,44 @@ public actor MockFogAPI: FogAPI {
         }
         username = trimmed
         return ProfileIdentity(userId: UUID(), username: trimmed, createdAt: Date())
+    }
+
+    // Fake territory data so the leaderboard page works offline.
+    public static let sampleAreas: [TerritoryArea] = [
+        TerritoryArea(id: "western-campus", name: "Western University", kind: "campus", totalTiles: 858,
+                      distanceFromMeM: 0, mine: AreaStats(percent: 12.4, timeS: 5_340, distanceM: 6_874)),
+        TerritoryArea(id: "gibbons-park", name: "Gibbons Park", kind: "park", totalTiles: 108,
+                      distanceFromMeM: 820, mine: AreaStats(percent: 3.7, timeS: 610, distanceM: 840)),
+        TerritoryArea(id: "downtown-london", name: "Downtown London", kind: "neighbourhood", totalTiles: 903,
+                      distanceFromMeM: 2_650, mine: AreaStats(percent: 0, timeS: 0, distanceM: 0)),
+    ]
+
+    public func leaderboardAreas(near location: Coordinate?) async throws -> LeaderboardAreasResponse {
+        try await Task.sleep(for: latency)
+        return LeaderboardAreasResponse(areas: Self.sampleAreas)
+    }
+
+    public func leaderboard(area: String, metric: LeaderboardMetric) async throws -> LeaderboardResponse {
+        try await Task.sleep(for: latency)
+        guard let a = Self.sampleAreas.first(where: { $0.id == area }) else {
+            throw Self.error(404, "area_not_found", "That area doesn't exist.")
+        }
+        let names = ["mapmaker_ana", "trailblazer", "fogbuster", "nightowl_99", "campus_rat", "quietwalker", "leafpeeper"]
+        let top: Double = metric == .percent ? 41 : metric == .time ? 21_000 : 26_000
+        var entries = names.enumerated().map { i, n in
+            LeaderboardEntry(rank: i + 1, name: n, value: (top * pow(0.72, Double(i))).rounded(), isMe: false)
+        }
+        let mineValue = a.mine.value(for: metric)
+        var me: LeaderboardEntry?
+        if mineValue > 0 {
+            let rank = (entries.firstIndex { $0.value < mineValue } ?? entries.count) + 1
+            let row = LeaderboardEntry(rank: rank, name: username ?? "Explorer 0A1B", value: mineValue, isMe: true)
+            entries.insert(row, at: rank - 1)
+            for i in rank..<entries.count { entries[i].rank = i + 1 }
+            me = row
+        }
+        return LeaderboardResponse(area: .init(id: a.id, name: a.name, kind: a.kind, totalTiles: a.totalTiles),
+                                   metric: metric, totalPlayers: entries.count, entries: entries, me: me)
     }
 
     static func error(_ status: Int, _ code: String, _ message: String) -> APIError {

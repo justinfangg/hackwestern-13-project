@@ -491,14 +491,23 @@ private enum StickerGeometry {
             height: unit.height * sticker.imageRect.height * size.height
         ).insetBy(dx: -sticker.outline, dy: -sticker.outline)
 
-        let angle = sticker.rotation * .pi / 180
-        let (cosA, sinA) = (cos(angle), sin(angle))
-        let corners = [
+        // Split into typed steps: as one expression this exceeds the Swift type checker's time limit.
+        let angle: Double = sticker.rotation * .pi / 180
+        let cosA = CGFloat(cos(angle)), sinA = CGFloat(sin(angle))
+        let unrotated: [CGPoint] = [
             CGPoint(x: art.minX, y: art.minY), CGPoint(x: art.maxX, y: art.minY),
             CGPoint(x: art.minX, y: art.maxY), CGPoint(x: art.maxX, y: art.maxY),
-        ].map { CGPoint(x: center.x + $0.x * cosA - $0.y * sinA, y: center.y + $0.x * sinA + $0.y * cosA) }
-        let xs = corners.map(\.x), ys = corners.map(\.y)
-        return CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
+        ]
+        let corners: [CGPoint] = unrotated.map { (p: CGPoint) -> CGPoint in
+            let x: CGFloat = center.x + p.x * cosA - p.y * sinA
+            let y: CGFloat = center.y + p.x * sinA + p.y * cosA
+            return CGPoint(x: x, y: y)
+        }
+        let xs: [CGFloat] = corners.map { $0.x }
+        let ys: [CGFloat] = corners.map { $0.y }
+        let minX = xs.min() ?? center.x, maxX = xs.max() ?? center.x
+        let minY = ys.min() ?? center.y, maxY = ys.max() ?? center.y
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 
     /// Opaque region of an image as fractions of its size (whole image if unknown).

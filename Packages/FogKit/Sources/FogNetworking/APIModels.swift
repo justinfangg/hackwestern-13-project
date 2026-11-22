@@ -358,3 +358,90 @@ public struct APIErrorBody: Hashable, Codable, Sendable {
 public struct APIErrorEnvelope: Codable, Sendable {
     public var error: APIErrorBody
 }
+
+// MARK: - GET leaderboard (§7: territory)
+
+public enum LeaderboardMetric: String, Codable, Sendable, CaseIterable, Identifiable {
+    /// Share of the area's tiles cleared (0–100).
+    case percent
+    /// Seconds of movement inside the area.
+    case time
+    /// Metres moved inside the area.
+    case distance
+    public var id: String { rawValue }
+}
+
+public struct AreaStats: Hashable, Codable, Sendable {
+    public var percent: Double
+    public var timeS: Double
+    public var distanceM: Double
+
+    public init(percent: Double, timeS: Double, distanceM: Double) {
+        self.percent = percent
+        self.timeS = timeS
+        self.distanceM = distanceM
+    }
+
+    public func value(for metric: LeaderboardMetric) -> Double {
+        switch metric {
+        case .percent: percent
+        case .time: timeS
+        case .distance: distanceM
+        }
+    }
+}
+
+/// A territory: "campus", "park" or "neighbourhood".
+public struct TerritoryArea: Hashable, Codable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    public var kind: String
+    public var totalTiles: Int
+    public var distanceFromMeM: Double?
+    /// The caller's own numbers in this area.
+    public var mine: AreaStats
+
+    public init(id: String, name: String, kind: String, totalTiles: Int, distanceFromMeM: Double? = nil, mine: AreaStats) {
+        self.id = id
+        self.name = name
+        self.kind = kind
+        self.totalTiles = totalTiles
+        self.distanceFromMeM = distanceFromMeM
+        self.mine = mine
+    }
+}
+
+public struct LeaderboardAreasResponse: Codable, Sendable {
+    public var areas: [TerritoryArea]
+}
+
+public struct LeaderboardEntry: Hashable, Codable, Sendable, Identifiable {
+    public var rank: Int
+    public var name: String
+    public var value: Double
+    public var isMe: Bool
+    public var id: String { "\(rank)-\(name)" }
+
+    public init(rank: Int, name: String, value: Double, isMe: Bool) {
+        self.rank = rank
+        self.name = name
+        self.value = value
+        self.isMe = isMe
+    }
+}
+
+public struct LeaderboardResponse: Codable, Sendable {
+    public struct Area: Hashable, Codable, Sendable {
+        public var id: String
+        public var name: String
+        public var kind: String
+        public var totalTiles: Int
+    }
+    public var area: Area
+    public var metric: LeaderboardMetric
+    public var totalPlayers: Int
+    /// Top 50, best first (ties share a rank).
+    public var entries: [LeaderboardEntry]
+    /// The caller's row, also when outside the top 50; nil if they have no score here yet.
+    public var me: LeaderboardEntry?
+}

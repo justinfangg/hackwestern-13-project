@@ -289,3 +289,38 @@ final class AuthStubURLProtocol: URLProtocol, @unchecked Sendable {
         #expect(await auth.userID == user)
     }
 }
+
+// MARK: - Leaderboard (§7)
+
+@Suite struct LeaderboardContractTests {
+    @Test func decodesAreasAndRanking() throws {
+        let areas = try JSONCoding.decoder.decode(LeaderboardAreasResponse.self, from: mockData("leaderboard-areas.200.json")).areas
+        #expect(areas.map(\.kind) == ["campus", "park", "neighbourhood"])
+        #expect(areas[0].mine.value(for: .distance) == 6874.2 && areas[0].distanceFromMeM == 0)
+        let board = try JSONCoding.decoder.decode(LeaderboardResponse.self, from: mockData("leaderboard.200.json"))
+        #expect(board.metric == .percent && board.entries.count == 4 && board.me?.rank == 3)
+        #expect(board.entries.filter(\.isMe).map(\.name) == ["vishaal"])
+        let e = try JSONCoding.decoder.decode(APIErrorEnvelope.self, from: mockData("leaderboard.404.json")).error
+        #expect(e.code == "area_not_found")
+    }
+}
+
+@Suite @MainActor struct LeaderboardModelTests {
+    @Test func loadsNearestAreaThenSwitchesMetricAndArea() async {
+        let model = LeaderboardModel(api: MockFogAPI(latency: .zero))
+        await model.load(near: .westernCampus)
+        #expect(model.areas.count == 3 && model.selectedArea?.id == "western-campus")
+        #expect(model.board?.metric == .percent && model.board?.me?.isMe == true)
+        await model.select(metric: .distance)
+        #expect(model.board?.metric == .distance && model.board?.me?.value == 6_874)
+        await model.select(area: "downtown-london")
+        #expect(model.board?.area.id == "downtown-london" && model.board?.me == nil)   // no score there yet
+        #expect(model.lastError == nil && !model.isLoading)
+    }
+
+    @Test func rememberedMetricIsUsedOnLoad() async {
+        let model = LeaderboardModel(api: MockFogAPI(latency: .zero))
+        await model.load(near: nil, metric: .time)
+        #expect(model.board?.metric == .time)
+    }
+}

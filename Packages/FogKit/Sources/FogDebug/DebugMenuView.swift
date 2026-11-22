@@ -10,10 +10,19 @@ public struct DebugMenuView: View {
     @State private var routeError: String?
     @State private var confirmReset = false
 
-    public init(settings: DebugSettings, location: LocationService, onResetFog: @escaping () -> Void) {
+    private let userID: String?
+    private let onRestoreFog: (() -> Void)?
+
+    /// - Parameters:
+    ///   - userID: shown under Account so it can be copied for `npm run db:seed-demo -- --user <id>`.
+    ///   - onRestoreFog: re-downloads this user's cleared tiles from the server (e.g. after seeding).
+    public init(settings: DebugSettings, location: LocationService, onResetFog: @escaping () -> Void,
+                userID: String? = nil, onRestoreFog: (() -> Void)? = nil) {
         self.settings = settings
         self.location = location
         self.onResetFog = onResetFog
+        self.userID = userID
+        self.onRestoreFog = onRestoreFog
     }
 
     private var simulator: SimulatedLocationProvider { location.simulator }
@@ -82,6 +91,16 @@ public struct DebugMenuView: View {
                 Text("Profile stats")
             } footer: {
                 Text("Shown on the profile's green (city explored) and blue (distance) cards instead of the real numbers.")
+            }
+            Section("Account") {
+                LabeledContent("Your user ID") {
+                    Text(userID ?? "Not signed in yet")
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+                if let onRestoreFog {
+                    Button("Restore fog from server", action: onRestoreFog)
+                }
             }
             Section("Status") {
                 LabeledContent("Source", value: location.isSimulating ? "Simulator" : "GPS")

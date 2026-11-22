@@ -60,7 +60,7 @@ Every error from our code has this shape. `details` is optional and specific to 
 | Duration | seconds, as integers, `_s` | `"duration_s": 1020` |
 | IDs | UUID strings. **The client generates expedition ids** (`UUID().uuidString`), so retries are idempotent | |
 | Images | standard base64 (not URL-safe), no `data:` prefix | |
-| Quest category | `bench` · `lamppost` · `tree` · `fire_hydrant` · `mural` · `statue` · `mailbox`. The client must show unknown values with a generic icon | |
+| Quest category | `bench` · `lamppost` · `tree` · `fire_hydrant` · `mural` · `statue` · `mailbox` · `chair`. The client must show unknown values with a generic icon | |
 
 "Today", "midnight" and quiet hours (23:00–05:00) are all in **America/Toronto** (D2).
 

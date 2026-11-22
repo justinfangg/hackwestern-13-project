@@ -37,7 +37,7 @@ public struct Quest: Identifiable, Hashable, Codable, Sendable {
 
 /// Display helpers for quest categories. Unknown categories must still display (docs/api.md §1).
 public enum QuestCategory {
-    public static let known = ["bench", "lamppost", "tree", "fire_hydrant", "mural", "statue", "mailbox"]
+    public static let known = ["bench", "lamppost", "tree", "fire_hydrant", "mural", "statue", "mailbox", "chair"]
 
     public static func displayName(_ category: String) -> String {
         category.replacingOccurrences(of: "_", with: " ")
@@ -53,6 +53,7 @@ public enum QuestCategory {
         case "mural": "paintpalette.fill"
         case "statue": "building.columns.fill"
         case "mailbox": "envelope.fill"
+        case "chair": "chair.fill"
         default: "star.fill"
         }
     }

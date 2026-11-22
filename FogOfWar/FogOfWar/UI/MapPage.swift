@@ -23,6 +23,10 @@ struct MapPage: View {
     @State private var coverage = CityCoverage()
     /// The active-quest card is showing its camera face.
     @State private var isCameraOpen = false
+    /// The photo being checked; the card shows it (and the answer) instead of the camera.
+    @State private var questPhoto: QuestPhoto?
+    /// The card has grown to the top of the screen to show the answer.
+    @State private var isResultExpanded = false
     /// Set when a quest is opened in the sheet: the map zooms to its target.
     @State private var questFocus: MapFocus?
 
@@ -301,7 +305,9 @@ struct MapPage: View {
                     onAbandon: abandonQuest,
                     onCapture: captureFromCard,
                     onPhoto: submitPhoto,
-                    debugPhoto: debugPhoto
+                    debugPhoto: debugPhoto,
+                    resultFace: questPhoto.map { resultFace(for: $0, quest: quest) },
+                    resultHeight: isResultExpanded ? resultCardHeight : cameraCardHeight
                 )
                 .padding(.horizontal, Self.questCardSideMargin)
                 .withLocateButton(locateButton, spacing: Self.locateSpacing)
@@ -390,6 +396,8 @@ struct MapPage: View {
     private func abandonQuest() {
         withAnimation(MainView.questTransition) {
             isCameraOpen = false
+            questPhoto = nil
+            isResultExpanded = false
             services.expeditions.end()
         }
     }
@@ -424,11 +432,76 @@ struct MapPage: View {
         withAnimation(ActiveQuestCard.cameraTransition) { isCameraOpen = true }
     }
 
-    /// Shrinks the card back to its summary, then verifies the photo; the
-    /// result shows up in the card's status line.
+    /// Freezes the shot on the card; `QuestResultView` sends it to be verified
+    /// and plays the answer. The camera stays "open" (top bar hidden, card tall).
     private func submitPhoto(_ photo: CGImage) {
-        withAnimation(ActiveQuestCard.cameraTransition) { isCameraOpen = false }
-        Task { await services.questCapture.capture(photo) }
+        isResultExpanded = false
+        withAnimation(ActiveQuestCard.cameraTransition) { questPhoto = QuestPhoto(image: photo) }
+    }
+
+    private func resultFace(for photo: QuestPhoto, quest: Quest) -> AnyView {
+        AnyView(
+            QuestResultView(
+                photo: photo.image,
+                quest: quest,
+                capture: services.questCapture,
+                isExpanded: $isResultExpanded,
+                submit: { await services.questCapture.capture(photo.image) },
+                expedition: expeditionSnapshot,
+                onRetry: retryPhoto,
+                onClose: closeResult,
+                onFinish: finishQuest
+            )
+            .id(photo.id)
+        )
+    }
+
+    /// "Try again": the card shrinks back to the camera (or to its summary if
+    /// the player has walked out of range).
+    private func retryPhoto() {
+        let capture = services.questCapture
+        capture.retry()
+        let canShoot = debugPhoto != nil || capture.canCapture
+        withAnimation(ActiveQuestCard.cameraTransition) {
+            isResultExpanded = false
+            questPhoto = nil
+            isCameraOpen = canShoot
+        }
+    }
+
+    private func closeResult() {
+        withAnimation(ActiveQuestCard.cameraTransition) {
+            isResultExpanded = false
+            questPhoto = nil
+            isCameraOpen = false
+        }
+    }
+
+    /// The sticker stats were closed: the quest is over. The stats already
+    /// showed the walk, so the recap sheet is skipped.
+    private func finishQuest() {
+        withAnimation(MainView.questTransition) {
+            isResultExpanded = false
+            questPhoto = nil
+            isCameraOpen = false
+            services.expeditions.end()
+        }
+        services.expeditions.dismissSummary()
+    }
+
+    /// The quest's walk so far, as the sticker stats show it.
+    private func expeditionSnapshot() -> ExpeditionSummary? {
+        guard let active = services.expeditions.active else { return nil }
+        return ExpeditionSummary(
+            id: active.id,
+            kind: active.kind,
+            startedAt: active.startedAt,
+            endedAt: .now,
+            distanceMeters: active.distanceMeters,
+            newTiles: active.newTiles,
+            segments: active.segments.filter { !$0.isEmpty },
+            sticker: active.sticker
+        )
     }
 
     /// Debug bypass photo source; always nil in release builds.
@@ -438,6 +511,11 @@ struct MapPage: View {
         #else
         nil
         #endif
+    }
+
+    /// The card with the verification answer: up to just under the status bar.
+    private var resultCardHeight: CGFloat {
+        fullSize.height - safeArea.top - 6 - Self.questCardBottomMargin
     }
 
     /// Figma's 542 pt camera card, kept clear of the status bar on short screens.

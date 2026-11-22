@@ -22,6 +22,10 @@ struct ActiveQuestCard: View {
     let onPhoto: (CGImage) -> Void
     /// Debug bypass: capture is always enabled and the shutter submits this image.
     var debugPhoto: (() -> CGImage?)? = nil
+    /// A photo being checked (or its answer): replaces the camera face.
+    var resultFace: AnyView? = nil
+    /// Height of the card while `resultFace` shows (it grows once the answer is in).
+    var resultHeight: CGFloat = 0
 
     @State private var confirmAbandon = false
 
@@ -36,7 +40,11 @@ struct ActiveQuestCard: View {
         // Each face keeps its own fixed height and is pinned to the bottom, so
         // the growing card reveals the camera instead of re-laying it out.
         ZStack(alignment: .bottom) {
-            if isCameraOpen {
+            if let resultFace {
+                resultFace
+                    .frame(height: cardHeight)
+                    .transition(.blurReplace)
+            } else if isCameraOpen {
                 QuestCameraView(
                     label: quest.category.capitalized,
                     camera: camera,
@@ -55,7 +63,7 @@ struct ActiveQuestCard: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: isCameraOpen ? cameraHeight : Self.height, alignment: .bottom)
+        .frame(height: cardHeight, alignment: .bottom)
         .background(SideQuestDesign.canvas)
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
@@ -64,6 +72,11 @@ struct ActiveQuestCard: View {
         } message: {
             Text("Your route so far is still saved.")
         }
+    }
+
+    private var cardHeight: CGFloat {
+        if resultFace != nil { return resultHeight }
+        return isCameraOpen ? cameraHeight : Self.height
     }
 
     private var summary: some View {

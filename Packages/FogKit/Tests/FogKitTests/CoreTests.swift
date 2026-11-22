@@ -53,3 +53,43 @@ import Testing
         #expect(d.at.timeIntervalSince1970 > 0)
     }
 }
+
+@Suite struct StickerPersistenceTests {
+    /// The snake_case round trip used by every JSON file and the API must keep the URLs and quest id
+    /// (keys like "image_url" convert back to "imageUrl", not "imageURL").
+    @Test func stickerKeepsURLsThroughSnakeCaseRoundTrip() throws {
+        let sticker = Sticker(questID: UUID(), category: "chair", questDate: "2026-11-22",
+                              location: Coordinate(latitude: 43, longitude: -81), placeName: "Hall",
+                              collectedAt: Date(timeIntervalSince1970: 1_795_000_000),
+                              imageURL: URL(string: "https://example.com/s.png"),
+                              localImageURL: URL(fileURLWithPath: "/tmp/stickers/a.png"))
+        let data = try JSONCoding.encoder.encode([sticker])
+        let json = String(decoding: data, as: UTF8.self)
+        #expect(json.contains("\"local_image_url\""))
+        #expect(json.contains("\"quest_id\""))
+        let decoded = try JSONCoding.decoder.decode([Sticker].self, from: data)
+        #expect(decoded.first?.questID == sticker.questID)
+        #expect(decoded.first?.imageURL == sticker.imageURL)
+        #expect(decoded.first?.localImageURL == sticker.localImageURL)
+    }
+
+    @MainActor @Test func profileReloadsLocalStickersFromDisk() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let stickers = dir.appendingPathComponent("stickers", isDirectory: true)
+        try FileManager.default.createDirectory(at: stickers, withIntermediateDirectories: true)
+        let png = stickers.appendingPathComponent("a.png")
+        try Data([1, 2, 3]).write(to: png)
+
+        let store = JSONFileStore<[Sticker]>(filename: "local-stickers.json", directory: dir)
+        let history = ExpeditionHistory(store: nil)
+        let first = ProfileModel(api: MockFogAPI(), history: history, localStickerStore: store)
+        first.addLocalSticker(Sticker(questID: UUID(), category: "tree", questDate: "2026-11-22",
+                                      location: Coordinate(latitude: 43, longitude: -81),
+                                      collectedAt: .now, localImageURL: png))
+
+        let relaunched = ProfileModel(api: MockFogAPI(), history: history, localStickerStore: store)
+        #expect(relaunched.stickers.count == 1)
+        #expect(relaunched.stickers.first?.localImageURL?.lastPathComponent == "a.png")
+    }
+}

@@ -76,7 +76,8 @@ public final class FogServices {
         questCapture = QuestCaptureModel(verifier: remoteVerifier,
                                          stickerCache: LocalStickerStorage(directory: storageDirectory?.appendingPathComponent("stickers")),
                                          location: location)
-        profile = ProfileModel(api: api, history: history)
+        profile = ProfileModel(api: api, history: history,
+                               localStickerStore: JSONFileStore(filename: "local-stickers.json", directory: storageDirectory))
         leaderboard = LeaderboardModel(api: api)
         feed = FeedModel(api: api)
 

@@ -116,4 +116,12 @@ public struct Sticker: Identifiable, Hashable, Codable, Sendable {
         self.imageURL = imageURL
         self.localImageURL = localImageURL
     }
+
+    /// `JSONCoding` converts keys to and from snake_case, and "image_url" converts back to
+    /// "imageUrl", not "imageURL". Without these the URLs silently decode as nil (a saved sticker
+    /// loses its artwork after a relaunch). On disk the keys stay "image_url" / "local_image_url".
+    private enum CodingKeys: String, CodingKey {
+        case id, questID = "questId", category, questDate, location, placeName, hint, collectedAt
+        case imageURL = "imageUrl", localImageURL = "localImageUrl"
+    }
 }

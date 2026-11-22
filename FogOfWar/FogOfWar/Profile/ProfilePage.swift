@@ -18,6 +18,8 @@ struct ProfilePage: View {
     @State private var isFocused = false
     /// Top-left of this page in global coordinates, to place the flying sticker.
     @State private var pageOrigin: CGPoint = .zero
+    /// Bumped when sticker artwork finishes downloading, so the board picks it up.
+    @State private var stickerArtworkVersion = 0
 
     // Figma offsets from the top of the profile container.
     private static let horizontalMargin: CGFloat = 28
@@ -74,6 +76,10 @@ struct ProfilePage: View {
             percentExplored = await coverage.percentExplored(by: explorationStore.clearedCells)
         }
         .task { await services.profile.refresh() }
+        // Stickers the server returned that this device has no artwork for yet.
+        .task(id: services.profile.stickers.map(\.id)) {
+            if await StickerImageCache.download(missingFrom: services.profile.stickers) { stickerArtworkVersion &+= 1 }
+        }
     }
 
     private var profileContent: some View {
@@ -97,15 +103,15 @@ struct ProfilePage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    /// The Figma demo stickers; debug builds add stickers made by the camera bypass.
+    /// The four Figma demo stickers, then the player's own, oldest first: every find the server
+    /// returns (artwork downloaded from Supabase Storage once, then cached) plus ones collected on
+    /// this device that the server doesn't have yet. Debug-bypass stickers only exist in debug builds.
     private var boardStickers: [BoardSticker] {
-        #if DEBUG
-        let debugStickers = services.profile.stickers.filter(\.isDebugBypass).reversed()
-            .enumerated().compactMap { BoardSticker.debugBypass($0.element, index: $0.offset) }
-        return BoardSticker.demo + debugStickers
-        #else
-        return BoardSticker.demo
-        #endif
+        _ = stickerArtworkVersion // re-read once downloads land
+        let collected = services.profile.stickers.reversed().enumerated().compactMap { index, sticker in
+            StickerImageCache.file(for: sticker).flatMap { BoardSticker.collected(sticker, imageFile: $0, index: index) }
+        }
+        return BoardSticker.demo + collected
     }
 
     private var boardHeight: CGFloat {

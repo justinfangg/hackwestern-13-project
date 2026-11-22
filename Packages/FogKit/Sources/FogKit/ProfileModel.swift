@@ -18,10 +18,36 @@ public final class ProfileModel {
 
     @ObservationIgnored private let api: FogAPI
     @ObservationIgnored private let history: ExpeditionHistory
+    /// Keeps `localStickers` across launches: debug-bypass stickers never reach the server, and a real
+    /// find shows before the server returns it.
+    @ObservationIgnored private let localStickerStore: JSONFileStore<[Sticker]>?
 
-    public init(api: FogAPI, history: ExpeditionHistory) {
+    public init(api: FogAPI, history: ExpeditionHistory, localStickerStore: JSONFileStore<[Sticker]>? = nil) {
         self.api = api
         self.history = history
+        self.localStickerStore = localStickerStore
+        if let store = localStickerStore, let saved = store.load() {
+            localStickers = saved.map { Self.relocated($0, stickersDirectory: Self.stickersDirectory(for: store)) }
+        }
+    }
+
+    /// `LocalStickerStorage`'s folder (Application Support/FogOfWar/stickers) beside the store's file.
+    private static func stickersDirectory(for store: JSONFileStore<[Sticker]>) -> URL {
+        store.url.deletingLastPathComponent().appendingPathComponent("stickers", isDirectory: true)
+    }
+
+    /// The app's container path can change between installs, so a saved absolute image path is
+    /// re-pointed at the same file name in the current sticker folder.
+    private static func relocated(_ sticker: Sticker, stickersDirectory: URL) -> Sticker {
+        guard let saved = sticker.localImageURL else { return sticker }
+        var sticker = sticker
+        let current = stickersDirectory.appendingPathComponent(saved.lastPathComponent)
+        if FileManager.default.fileExists(atPath: current.path) {
+            sticker.localImageURL = current
+        } else if !FileManager.default.fileExists(atPath: saved.path) {
+            sticker.localImageURL = nil
+        }
+        return sticker
     }
 
     /// nil until a username is set (onboarding calls `setUsername`).
@@ -86,5 +112,6 @@ public final class ProfileModel {
 
     public func addLocalSticker(_ sticker: Sticker) {
         localStickers.insert(sticker, at: 0)
+        localStickerStore?.save(localStickers)
     }
 }

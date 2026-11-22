@@ -62,28 +62,56 @@ struct QuestSheet<Content: View>: View {
     }
 
     private var header: some View {
-        HStack {
-            Text("Quests")
-                .font(SideQuestDesign.ptSans(20))
-                .tracking(-0.6)
-                .foregroundStyle(SideQuestDesign.primaryText)
+        HStack(spacing: 0) {
+            title
             Spacer(minLength: 12)
-            Image("QuestsGlobe")
-                .resizable()
-                .frame(width: 28, height: 28)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: toggle)
                 .accessibilityHidden(true)
+            exploreButton
         }
         .padding(.leading, 22)
-        .padding(.trailing, 16)
+        .padding(.trailing, 9.5)
         .frame(height: Self.collapsedHeight)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            settle(expanded: !isExpanded, from: height, velocity: 0)
+    }
+
+    private var title: some View {
+        Text("Quests")
+            .font(SideQuestDesign.ptSans(20))
+            .tracking(-0.6)
+            .foregroundStyle(SideQuestDesign.primaryText)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: toggle)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Collapses the quest sheet" : "Shows today's quest")
+    }
+
+    /// Figma "Explore Button": will start free-roam explore mode. No action yet.
+    private var exploreButton: some View {
+        Button {
+            // TODO: start free-roam explore mode.
+        } label: {
+            HStack(spacing: 6) {
+                Image("ExplorePlay")
+                Text("Explore")
+                    .font(SideQuestDesign.ptSans(fixed: 20))
+                    .tracking(-0.6)
+                    .foregroundStyle(.white)
+            }
+            .padding(.leading, 19)
+            .frame(width: 115, height: 35, alignment: .leading)
+            .background(SideQuestDesign.accentGreen, in: Capsule())
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-        .accessibilityHint(isExpanded ? "Collapses the quest sheet" : "Shows today's quest")
+        .buttonStyle(.plain)
+        .accessibilityLabel("Explore")
+        .accessibilityHint("Free roam explore mode, coming soon")
+    }
+
+    private func toggle() {
+        settle(expanded: !isExpanded, from: height, velocity: 0)
     }
 
     private var dragGesture: some Gesture {

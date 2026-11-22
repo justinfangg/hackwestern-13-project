@@ -7,6 +7,13 @@ import FogKit
 /// solid stat cards.
 struct LeaderboardPage: View {
     let initialMetric: LeaderboardMetric
+    /// Off when the page is a tab (there's nothing to dismiss).
+    var showsCloseButton = true
+    /// Extra room at the bottom, e.g. for the tab bar floating over the page.
+    var bottomInset: CGFloat = 0
+    /// As a tab, the light surface fills the whole page and the parent rounds
+    /// it to the screen's corners. Otherwise it's a rounded card on the canvas.
+    var fillsScreen = false
 
     @Environment(FogServices.self) private var services
     @Environment(\.dismiss) private var dismiss
@@ -33,14 +40,19 @@ struct LeaderboardPage: View {
 
                 ranking
                     .padding(.top, 18)
+                    .padding(.bottom, bottomInset)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background {
-                RoundedRectangle(cornerRadius: SideQuestDesign.containerCornerRadius, style: .continuous)
-                    .fill(SideQuestDesign.profileSurface)
-                    .ignoresSafeArea(edges: .bottom)
+                if fillsScreen {
+                    SideQuestDesign.profileSurface.ignoresSafeArea()
+                } else {
+                    RoundedRectangle(cornerRadius: SideQuestDesign.containerCornerRadius, style: .continuous)
+                        .fill(SideQuestDesign.profileSurface)
+                        .ignoresSafeArea(edges: .bottom)
+                }
             }
-            .padding(.top, 8)
+            .padding(.top, fillsScreen ? 0 : 8)
         }
         .task {
             let here = services.location.currentCoordinate ?? services.location.displayCoordinate
@@ -69,15 +81,17 @@ struct LeaderboardPage: View {
 
             Spacer(minLength: 12)
 
-            Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(SideQuestDesign.primaryText)
-                    .frame(width: 50, height: 50)
-                    .background(Circle().fill(.white))
-                    .overlay(Circle().stroke(SideQuestDesign.boardBorder, lineWidth: 1))
+            if showsCloseButton {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(SideQuestDesign.primaryText)
+                        .frame(width: 50, height: 50)
+                        .background(Circle().fill(.white))
+                        .overlay(Circle().stroke(SideQuestDesign.boardBorder, lineWidth: 1))
+                }
+                .accessibilityLabel("Close leaderboard")
             }
-            .accessibilityLabel("Close leaderboard")
         }
     }
 

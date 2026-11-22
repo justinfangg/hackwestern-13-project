@@ -23,6 +23,28 @@ enum SideQuestDesign {
     static let boardDot = Color(red: 0xE8 / 255, green: 0xE8 / 255, blue: 0xE8 / 255)
     static let boardLabelText = Color(red: 0x46 / 255, green: 0x46 / 255, blue: 0x46 / 255)
 
+    // Tab bar + map chrome (Figma 55:3722).
+    /// Selected tab icon, the Explore button and the locate pin.
+    static let accentGreen = Color(red: 0x43 / 255, green: 0x7B / 255, blue: 0x3F / 255)
+    /// Unselected tab icons (Figma "Control Icon" stroke, trophy fill).
+    static let tabInactive = Color(red: 0x9E / 255, green: 0xA1 / 255, blue: 0x9E / 255)
+    /// Fill of the social tab's stacked cards.
+    static let tabIconFill = Color(red: 0xEF / 255, green: 0xEF / 255, blue: 0xEF / 255)
+
+    /// Corner radius of the device's display, so full-screen pages can be
+    /// rounded to match the hardware (55 pt on current iPhones). UIKit only
+    /// exposes it through a private key; falls back to 55 if that ever fails.
+    @MainActor
+    static var screenCornerRadius: CGFloat {
+        let screen = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.screen }
+            .first
+        if let radius = screen?.value(forKey: "_displayCornerRadius") as? CGFloat, radius > 0 {
+            return radius
+        }
+        return 55
+    }
+
     /// PT Sans (bundled in Fonts/); scales with Dynamic Type relative to `.title3`.
     static func ptSans(_ size: CGFloat, relativeTo style: Font.TextStyle = .title3) -> Font {
         .custom("PTSans-Regular", size: size, relativeTo: style)

@@ -2,14 +2,10 @@ import CoreLocation
 import SwiftUI
 import FogKit
 
-/// Contents of the map container: the cloud-covered map, Figma's top and
-/// bottom fades, and the expandable Quests sheet.
-///
-/// The map view itself stays full-screen size and is centered in whatever
-/// height the split gives it, so resizing the container only clips (no MapKit
-/// relayout) and the player's dot stays in the middle of the visible area.
+/// The map tab (Figma 55:3722): the cloud-covered map, the city name and
+/// profile button on top, the locate button, Figma's top and bottom fades, and
+/// the expandable Quests sheet sitting above the tab bar.
 struct MapPage: View {
-    let visibleHeight: CGFloat
     let fullSize: CGSize
     let safeArea: EdgeInsets
 
@@ -22,11 +18,22 @@ struct MapPage: View {
     @State private var isFollowingUser = true
     @State private var isQuestSheetExpanded = false
     @State private var showDebug = false
+    @State private var showProfile = false
+    /// Reverse-geocoded city for the name at the top of the map.
+    @State private var coverage = CityCoverage()
     /// The active-quest card is showing its camera face.
     @State private var isCameraOpen = false
 
-    private static let sheetBottomMargin: CGFloat = 23
-    private static let sheetHorizontalMargin: CGFloat = 30.5
+    /// The sheet sits 14 pt above the tab bar (Figma: 377 pt wide, bottom at 793 of 874).
+    private static let sheetBottomMargin: CGFloat = MainTabBar.reservedHeight + 14
+    private static let sheetHorizontalMargin: CGFloat = 12.5
+    /// Top bar (city name + profile): 10 pt below the status bar.
+    private static let topBarSpacing: CGFloat = 10
+    private static let topBarHeight: CGFloat = 46
+    private static let profileTrailingMargin: CGFloat = 23
+    /// Locate button: 12 pt from the right edge, 13 pt above the sheet or card.
+    private static let locateTrailingMargin: CGFloat = 12
+    private static let locateSpacing: CGFloat = 13
     /// Active-quest card insets (Figma 16:383: 388 pt wide, 8 pt off the bottom).
     private static let questCardSideMargin: CGFloat = 7
     private static let questCardBottomMargin: CGFloat = 8
@@ -37,23 +44,30 @@ struct MapPage: View {
     var body: some View {
         map
             .frame(width: fullSize.width, height: fullSize.height)
-            .offset(y: mapShift)
-            .frame(width: fullSize.width, height: max(visibleHeight, 0))
             .overlay(alignment: .top) { topFade }
             // Debug joystick sits under the card/sheet so they cover it as they grow.
             .overlay(alignment: .leading) {
                 if services.debug.isSimulatorEnabled {
                     JoystickView(simulator: services.location.simulator)
                         .padding(.leading, 24)
-                        .opacity(isQuestSheetExpanded || isCameraOpen ? 0 : chromeOpacity)
+                        .opacity(isQuestSheetExpanded || isCameraOpen ? 0 : 1)
                         .allowsHitTesting(!isQuestSheetExpanded && !isCameraOpen)
                         .animation(.smooth, value: isCameraOpen)
                         .animation(.smooth, value: isQuestSheetExpanded)
                 }
             }
             .overlay(alignment: .bottom) { bottomChrome }
-            .overlay(alignment: .topTrailing) { recenterButton }
-            .animation(.snappy, value: isFollowingUser)
+            .overlay(alignment: .bottomTrailing) { locateButton }
+            .overlay(alignment: .top) { topBar }
+            .animation(.smooth, value: isCameraOpen)
+            .animation(.smooth, value: isQuestSheetExpanded)
+            .sheet(isPresented: $showProfile) {
+                GeometryReader { proxy in
+                    ProfilePage(contentHeight: proxy.size.height)
+                }
+                .presentationDragIndicator(.visible)
+                .presentationBackground(SideQuestDesign.profileSurface)
+            }
             .sheet(isPresented: $showDebug) {
                 NavigationStack {
                     DebugMenuView(settings: services.debug, location: services.location,
@@ -66,6 +80,10 @@ struct MapPage: View {
             .sheet(item: Binding(get: { services.expeditions.lastSummary },
                                  set: { if $0 == nil { services.expeditions.dismissSummary() } })) { summary in
                 RecapSheet(summary: summary)
+            }
+            .task(id: coordinateKey) {
+                guard let coordinate = playerCoordinate else { return }
+                await coverage.locate(near: coordinate.clCoordinate)
             }
             .task {
                 #if targetEnvironment(simulator)
@@ -82,23 +100,6 @@ struct MapPage: View {
     }
 
     // MARK: Map
-
-    private var hiddenMapHeight: CGFloat { max(fullSize.height - visibleHeight, 0) / 2 }
-
-    /// As the map collapses toward a strip, nudge its center below the status
-    /// bar so the player's dot never hides behind the Dynamic Island.
-    private var mapShift: CGFloat {
-        let expanded = fullSize.height - 88   // Figma map height (874 → 786)
-        let collapsed = MainView.collapsedMapHeight(safeAreaTop: safeArea.top)
-        guard expanded > collapsed else { return 0 }
-        let progress = min(max((expanded - visibleHeight) / (expanded - collapsed), 0), 1)
-        return safeArea.top / 2 * progress
-    }
-
-    /// Fades the Quests sheet and joystick out as the profile takes over.
-    private var chromeOpacity: Double {
-        Double(min(max((visibleHeight - 250) / 110, 0), 1))
-    }
 
     private var map: some View {
         FogMapView(
@@ -120,17 +121,30 @@ struct MapPage: View {
 
     /// Lifts MapKit's legal label above the Quests pill. MapKit centers the
     /// player inside these margins, so top and bottom stay equal to keep the
-    /// dot at the map view's center (the visible center, plus `mapShift`).
+    /// dot at the map view's center.
     private var mapChromeInsets: UIEdgeInsets {
-        let chrome: CGFloat = if isOnQuest {
-            Self.questCardBottomMargin + ActiveQuestCard.height + 6
-        } else if chromeOpacity > 0.5 {
-            Self.sheetBottomMargin + QuestSheet<EmptyView>.collapsedHeight + 6
-        } else {
-            10
-        }
-        let vertical = hiddenMapHeight + mapShift + chrome
+        let vertical = bottomChromeHeight + 6
         return UIEdgeInsets(top: vertical, left: 24, bottom: vertical, right: 24)
+    }
+
+    /// Height of the collapsed sheet (or the quest card) plus its margin.
+    private var bottomChromeHeight: CGFloat {
+        isOnQuest
+            ? Self.questCardBottomMargin + ActiveQuestCard.height
+            : Self.sheetBottomMargin + QuestSheet<EmptyView>.collapsedHeight
+    }
+
+    private var cityName: String? {
+        services.debug.cityName(real: coverage.city?.name)
+    }
+
+    private var playerCoordinate: Coordinate? {
+        services.location.currentCoordinate ?? services.location.displayCoordinate
+    }
+
+    /// Changes only when the player moves ~1 km, so the city lookup isn't re-run on every fix.
+    private var coordinateKey: String? {
+        playerCoordinate.map { String(format: "%.2f,%.2f", $0.latitude, $0.longitude) }
     }
 
     private var questStatus: QuestMarkerData.Status {
@@ -174,20 +188,61 @@ struct MapPage: View {
         .allowsHitTesting(false)
     }
 
+    /// Figma bottom "StatusBarBg": solid #EBEBEB at the edge fading upward.
+    private func bottomFade(height: CGFloat) -> some View {
+        LinearGradient(
+            stops: [
+                .init(color: SideQuestDesign.mapBottomFade.opacity(0), location: 0),
+                .init(color: Color(red: 233 / 255, green: 233 / 255, blue: 233 / 255, opacity: 0.42), location: 0.322),
+                .init(color: SideQuestDesign.mapBottomFade, location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: height)
+        .allowsHitTesting(false)
+    }
+
+    /// City name centered, profile button on the right (Figma "Location
+    /// Selector" and "Profile", 10 pt under the status bar).
+    private var topBar: some View {
+        ZStack {
+            Text(cityName ?? "Locating…")
+                .font(SideQuestDesign.ptSans(fixed: 20))
+                .tracking(-0.6)
+                .foregroundStyle(cityName == nil ? SideQuestDesign.boardLabelText : SideQuestDesign.primaryText)
+                .lineLimit(1)
+                .padding(.horizontal, 22)
+                .frame(minWidth: 119)
+                .frame(height: Self.topBarHeight)
+                .background(.white, in: Capsule())
+                .frame(maxWidth: fullSize.width - 2 * (Self.profileTrailingMargin + Self.topBarHeight + 8))
+                .accessibilityLabel(cityName.map { "Exploring \($0)" } ?? "Finding your city")
+                .animation(.smooth, value: cityName)
+
+            Button { showProfile = true } label: {
+                Image("ProfileAvatar")
+                    .resizable()
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                    .frame(width: Self.topBarHeight, height: Self.topBarHeight)
+                    .background(.white, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Profile")
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.trailing, Self.profileTrailingMargin)
+        }
+        .padding(.top, safeArea.top + Self.topBarSpacing)
+        .opacity(isCameraOpen ? 0 : 1)
+        .allowsHitTesting(!isCameraOpen)
+    }
+
     private var bottomChrome: some View {
         ZStack(alignment: .bottom) {
-            // Figma bottom "StatusBarBg": solid #EBEBEB at the edge fading upward.
-            LinearGradient(
-                stops: [
-                    .init(color: SideQuestDesign.mapBottomFade.opacity(0), location: 0),
-                    .init(color: Color(red: 233 / 255, green: 233 / 255, blue: 233 / 255, opacity: 0.42), location: 0.322),
-                    .init(color: SideQuestDesign.mapBottomFade, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 46)
-            .allowsHitTesting(false)
+            // Figma stacks two of these: a tall soft one and a short one at the edge.
+            bottomFade(height: 111)
+            bottomFade(height: 51)
 
             if isOnQuest, let quest = services.quests.today, let expedition = services.expeditions.active {
                 ActiveQuestCard(
@@ -208,7 +263,7 @@ struct MapPage: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 QuestSheet(
-                    maxHeight: visibleHeight / 2 - Self.sheetBottomMargin,
+                    maxHeight: fullSize.height / 2 - Self.sheetBottomMargin,
                     isExpanded: $isQuestSheetExpanded
                 ) {
                     QuestSheetContent(
@@ -219,8 +274,6 @@ struct MapPage: View {
                 }
                 .padding(.horizontal, Self.sheetHorizontalMargin)
                 .padding(.bottom, Self.sheetBottomMargin)
-                .opacity(chromeOpacity)
-                .allowsHitTesting(chromeOpacity > 0.5)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -257,25 +310,25 @@ struct MapPage: View {
         }
     }
 
-    @ViewBuilder
-    private var recenterButton: some View {
-        // Hidden in the collapsed strip above the open profile.
-        if !isFollowingUser && chromeOpacity > 0.5 {
-            Button {
-                recenterToken &+= 1
-            } label: {
-                Image(systemName: "location.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color(red: 0x0C / 255, green: 0x79 / 255, blue: 0xFE / 255))
-                    .frame(width: 44, height: 44)
-                    .background(.regularMaterial, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Center on my location")
-            .padding(.top, safeArea.top + 8)
-            .padding(.trailing, 16)
-            .transition(.scale(scale: 0.6).combined(with: .opacity))
+    /// Figma "Add Location": jumps back to the player and resumes following.
+    private var locateButton: some View {
+        let isHidden = isQuestSheetExpanded || isCameraOpen
+        return Button {
+            recenterToken &+= 1
+        } label: {
+            Image("MapLocate")
+                .frame(width: 46, height: 46)
+                .background(.white, in: Circle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Center on my location")
+        .accessibilityValue(isFollowingUser ? "Following" : "Not following")
+        .padding(.trailing, Self.locateTrailingMargin)
+        .padding(.bottom, bottomChromeHeight + Self.locateSpacing)
+        .opacity(isHidden ? 0 : 1)
+        .scaleEffect(isHidden ? 0.6 : 1)
+        .allowsHitTesting(!isHidden)
+        .animation(MainView.questTransition, value: isOnQuest)
     }
 
     // MARK: Quest capture
@@ -296,7 +349,7 @@ struct MapPage: View {
 
     /// Figma's 542 pt camera card, kept clear of the status bar on short screens.
     private var cameraCardHeight: CGFloat {
-        min(ActiveQuestCard.cameraHeight, visibleHeight - safeArea.top - Self.questCardBottomMargin - 16)
+        min(ActiveQuestCard.cameraHeight, fullSize.height - safeArea.top - Self.questCardBottomMargin - 16)
     }
 }
 

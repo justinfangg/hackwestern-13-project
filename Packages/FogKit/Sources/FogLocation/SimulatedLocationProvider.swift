@@ -18,8 +18,10 @@ public final class SimulatedLocationProvider: LocationProvider {
 
     /// Walking speed in m/s (PRD D-2: ~1.4).
     public var walkingSpeed: Double = 1.4
-    /// Speed multiplier for the joystick boost and Auto-Walk (PRD D-2: 5x).
+    /// Speed multiplier for the joystick boost and Auto-Walk.
     public var boost: Double = 1
+    /// Multiplier used by the debug "Boost" toggle (50x walking ≈ 70 m/s).
+    public static let debugBoost: Double = 50
     /// How often fixes are emitted.
     public var tickInterval: TimeInterval = 0.25
 

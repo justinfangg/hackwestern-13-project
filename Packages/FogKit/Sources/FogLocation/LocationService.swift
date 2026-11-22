@@ -36,6 +36,12 @@ public final class LocationService {
     @ObservationIgnored private var filter: FixFilter
     @ObservationIgnored private var subscribers: [UUID: (LocationStep) -> Void] = [:]
     @ObservationIgnored private var backgroundEnabled = false
+    /// The configured real-GPS speed cap, restored when Simulator Mode turns off.
+    @ObservationIgnored private let realMaxSpeed: Double
+
+    /// Speed cap while simulating: the debug boost (50x walking ≈ 70 m/s) must
+    /// not be rejected as GPS jumps, but teleports (thousands of m/s) still are.
+    public static let simulatorMaxSpeed: Double = 120
 
     public init(realProvider: LocationProvider? = nil,
                 simulator: SimulatedLocationProvider? = nil,
@@ -43,6 +49,7 @@ public final class LocationService {
         self.realProvider = realProvider ?? RealLocationProvider()
         self.simulator = simulator ?? SimulatedLocationProvider()
         self.filter = FixFilter(config: filterConfig)
+        self.realMaxSpeed = filterConfig.maxSpeed
         self.realProvider.onFix = { [weak self] in self?.handle($0) }
         self.simulator.onFix = { [weak self] in self?.handle($0) }
     }
@@ -69,6 +76,7 @@ public final class LocationService {
         if wasRunning { activeProvider.stop() }
         activeProvider.setBackgroundUpdates(false)
         isSimulating = on
+        filter.config.maxSpeed = on ? Self.simulatorMaxSpeed : realMaxSpeed
         filter.reset()
         if on, let here = currentCoordinate { simulator.teleport(to: here) }
         activeProvider.setBackgroundUpdates(backgroundEnabled)

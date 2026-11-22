@@ -23,9 +23,9 @@ public struct DebugMenuView: View {
             Section("Simulator Mode") {
                 Toggle("Use simulated location", isOn: $settings.isSimulatorEnabled)
                 if settings.isSimulatorEnabled {
-                    Toggle("Boost (5x speed)", isOn: Binding(
+                    Toggle("Boost (\(Int(SimulatedLocationProvider.debugBoost))x speed)", isOn: Binding(
                         get: { simulator.boost > 1 },
-                        set: { simulator.boost = $0 ? 5 : 1 }))
+                        set: { simulator.boost = $0 ? SimulatedLocationProvider.debugBoost : 1 }))
                     if simulator.mode == .autoWalk {
                         Button("Stop Auto-Walk") { simulator.stopAutoWalk() }
                     } else {
@@ -39,8 +39,14 @@ public struct DebugMenuView: View {
                 Toggle("On-device verifier (no network)", isOn: $settings.useOnDeviceVerifier)
                 Toggle("Mock backend (applies on relaunch)", isOn: $settings.useMockBackend)
             }
-            Section("Demo reset") {
+            Section {
+                Toggle("\(DebugSettings.fakeParticipantCount) explorers on every quest",
+                       isOn: $settings.fakeParticipants)
                 Button("Reset fog", role: .destructive) { confirmReset = true }
+            } header: {
+                Text("Demo")
+            } footer: {
+                Text("Overrides the real participant count everywhere it's shown.")
             }
             Section("Status") {
                 LabeledContent("Source", value: location.isSimulating ? "Simulator" : "GPS")

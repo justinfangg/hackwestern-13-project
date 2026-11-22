@@ -4,19 +4,66 @@ import FogKit
 /// Dark card shown while a quest is in progress (Figma node 16:383): elapsed
 /// time, quest name, distance left, who else is on it, and the abandon /
 /// capture buttons.
+///
+/// The same container doubles as the camera (Figma node 16:390): opening it
+/// springs the card taller and blur-swaps the summary for the live feed.
 struct ActiveQuestCard: View {
     let quest: Quest
     let startedAt: Date
     let captureState: QuestCaptureModel.State
     let distanceToTarget: Double?
+    /// Explorers on this quest (real count, or the debug override).
+    let participantCount: Int
+    @Binding var isCameraOpen: Bool
+    let camera: CameraController
+    let cameraHeight: CGFloat
     let onAbandon: () -> Void
     let onCapture: () -> Void
+    let onPhoto: (CGImage) -> Void
 
     @State private var confirmAbandon = false
 
     static let height: CGFloat = 168
+    /// Figma camera card: 388 × 542.
+    static let cameraHeight: CGFloat = 542
+    static let cornerRadius: CGFloat = 53
+    /// Spring for the card growing into (and shrinking out of) the camera.
+    static let cameraTransition: Animation = .spring(duration: 0.36, bounce: 0.14)
 
     var body: some View {
+        // Each face keeps its own fixed height and is pinned to the bottom, so
+        // the growing card reveals the camera instead of re-laying it out.
+        ZStack(alignment: .bottom) {
+            if isCameraOpen {
+                QuestCameraView(
+                    label: quest.category.capitalized,
+                    camera: camera,
+                    onClose: {
+                        withAnimation(Self.cameraTransition) { isCameraOpen = false }
+                    },
+                    onPhoto: onPhoto
+                )
+                .frame(height: cameraHeight)
+                .transition(.blurReplace)
+            } else {
+                summary
+                    .frame(height: Self.height)
+                    .transition(.blurReplace)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: isCameraOpen ? cameraHeight : Self.height, alignment: .bottom)
+        .background(SideQuestDesign.canvas)
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .confirmationDialog("Abandon this quest?", isPresented: $confirmAbandon, titleVisibility: .visible) {
+            Button("Abandon Quest", role: .destructive, action: onAbandon)
+        } message: {
+            Text("Your route so far is still saved.")
+        }
+    }
+
+    private var summary: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 0) {
                 // Live, self-updating elapsed time since the quest was accepted.
@@ -47,8 +94,8 @@ struct ActiveQuestCard: View {
             Spacer(minLength: 0)
 
             VStack(alignment: .trailing, spacing: 0) {
-                ParticipantStack(count: quest.foundTodayCount)
-                    .padding(.top, 22)
+                ParticipantStack(count: participantCount)
+                    .padding(.top, 30)
                 Spacer(minLength: 0)
                 HStack(spacing: 8.4) {
                     Button(action: { confirmAbandon = true }) {
@@ -71,14 +118,7 @@ struct ActiveQuestCard: View {
         }
         .foregroundStyle(SideQuestDesign.pillText)
         .frame(maxWidth: .infinity)
-        .frame(height: Self.height)
-        .background(SideQuestDesign.canvas, in: RoundedRectangle(cornerRadius: 53, style: .continuous))
         .animation(.snappy, value: canCapture)
-        .confirmationDialog("Abandon this quest?", isPresented: $confirmAbandon, titleVisibility: .visible) {
-            Button("Abandon Quest", role: .destructive, action: onAbandon)
-        } message: {
-            Text("Your route so far is still saved.")
-        }
     }
 
     /// In range, or retrying after a failed photo.

@@ -120,6 +120,38 @@ import Testing
         #expect(steps == 6)
         _ = sub
     }
+
+    @Test func debugBoostIsNotRejectedAsTooFast() {
+        let clock = TestClock()
+        let service = LocationService(simulator: SimulatedLocationProvider(clock: clock.closure))
+        service.setSimulating(true)
+        service.simulator.boost = SimulatedLocationProvider.debugBoost // ~70 m/s
+        var steps: [LocationStep] = []
+        let sub = service.subscribe { steps.append($0) }
+        service.simulator.setJoystick(x: 1, y: 0)
+        for _ in 0..<8 { clock.advance(0.25); service.simulator.tick(dt: 0.25) }
+        // Every fix is accepted and, after the first, joined to the previous one
+        // (interpolated), so the walked path clears without gaps.
+        #expect(steps.count == 8)
+        #expect(steps.dropFirst().allSatisfy { !$0.newSegment })
+        _ = sub
+    }
+
+    @Test func realGPSSpeedCapIsRestoredAfterSimulating() {
+        let clock = TestClock()
+        let service = LocationService(simulator: SimulatedLocationProvider(clock: clock.closure))
+        service.setSimulating(true)
+        service.setSimulating(false)
+        var steps = 0
+        let sub = service.subscribe { _ in steps += 1 }
+        let start = Coordinate.westernCampus
+        service.handle(fix(start, at: clock.now))
+        clock.advance(1)
+        // 40 m in 1 s is faster than the 15 m/s real-GPS cap.
+        service.handle(fix(Geo.offset(start, north: 40, east: 0), at: clock.now))
+        #expect(steps == 1)
+        _ = sub
+    }
 }
 
 @Suite struct GPXTests {

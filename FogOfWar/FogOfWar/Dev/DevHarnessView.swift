@@ -74,7 +74,7 @@ struct DevHarnessView: View {
                 services.debug.isMenuUnlocked = true
                 services.debug.isSimulatorEnabled = true
             }
-            services.location.simulator.boost = 5 // walking speed is hard to see while testing
+            services.location.simulator.boost = SimulatedLocationProvider.debugBoost // walking speed is hard to see while testing
             #endif
             _ = await permissions.requestWhenInUse()
             services.start()

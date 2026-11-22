@@ -22,7 +22,8 @@ struct MapPage: View {
     @State private var isFollowingUser = true
     @State private var isQuestSheetExpanded = false
     @State private var showDebug = false
-    @State private var showCamera = false
+    /// The active-quest card is showing its camera face.
+    @State private var isCameraOpen = false
 
     private static let sheetBottomMargin: CGFloat = 23
     private static let sheetHorizontalMargin: CGFloat = 30.5
@@ -39,17 +40,19 @@ struct MapPage: View {
             .offset(y: mapShift)
             .frame(width: fullSize.width, height: max(visibleHeight, 0))
             .overlay(alignment: .top) { topFade }
-            .overlay(alignment: .bottom) { bottomChrome }
-            .overlay(alignment: .topTrailing) { recenterButton }
+            // Debug joystick sits under the card/sheet so they cover it as they grow.
             .overlay(alignment: .leading) {
                 if services.debug.isSimulatorEnabled {
                     JoystickView(simulator: services.location.simulator)
                         .padding(.leading, 24)
-                        .opacity(isQuestSheetExpanded ? 0 : chromeOpacity)
-                        .allowsHitTesting(!isQuestSheetExpanded)
+                        .opacity(isQuestSheetExpanded || isCameraOpen ? 0 : chromeOpacity)
+                        .allowsHitTesting(!isQuestSheetExpanded && !isCameraOpen)
+                        .animation(.smooth, value: isCameraOpen)
                         .animation(.smooth, value: isQuestSheetExpanded)
                 }
             }
+            .overlay(alignment: .bottom) { bottomChrome }
+            .overlay(alignment: .topTrailing) { recenterButton }
             .animation(.snappy, value: isFollowingUser)
             .sheet(isPresented: $showDebug) {
                 NavigationStack {
@@ -58,7 +61,6 @@ struct MapPage: View {
                         .navigationTitle("Debug")
                 }
             }
-            .sheet(isPresented: $showCamera) { cameraSheet }
             .sheet(item: Binding(get: { services.expeditions.lastSummary },
                                  set: { if $0 == nil { services.expeditions.dismissSummary() } })) { summary in
                 RecapSheet(summary: summary)
@@ -70,7 +72,7 @@ struct MapPage: View {
                     services.debug.isMenuUnlocked = true
                     services.debug.isSimulatorEnabled = true
                 }
-                services.location.simulator.boost = 5 // walking speed is hard to see while testing
+                services.location.simulator.boost = SimulatedLocationProvider.debugBoost // walking speed is hard to see while testing
                 #endif
                 _ = await permissions.requestWhenInUse()
                 services.start()
@@ -144,7 +146,7 @@ struct MapPage: View {
                 coordinate: quest.target.clCoordinate,
                 title: quest.category.capitalized,
                 subtitle: quest.title,
-                participantCount: quest.foundTodayCount,
+                participantCount: services.debug.participantCount(real: quest.foundTodayCount),
                 status: questStatus,
                 // The accepted-quest frame shows only the beacon.
                 showsLabel: !isOnQuest
@@ -191,8 +193,13 @@ struct MapPage: View {
                     startedAt: expedition.startedAt,
                     captureState: services.questCapture.state,
                     distanceToTarget: services.questCapture.distanceToTarget,
+                    participantCount: services.debug.participantCount(real: quest.foundTodayCount),
+                    isCameraOpen: $isCameraOpen,
+                    camera: camera,
+                    cameraHeight: cameraCardHeight,
                     onAbandon: abandonQuest,
-                    onCapture: captureFromCard
+                    onCapture: captureFromCard,
+                    onPhoto: submitPhoto
                 )
                 .padding(.horizontal, Self.questCardSideMargin)
                 .padding(.bottom, Self.questCardBottomMargin)
@@ -243,6 +250,7 @@ struct MapPage: View {
 
     private func abandonQuest() {
         withAnimation(MainView.questTransition) {
+            isCameraOpen = false
             services.expeditions.end()
         }
     }
@@ -269,33 +277,23 @@ struct MapPage: View {
 
     // MARK: Quest capture
 
+    /// Opens the camera inside the active-quest card (accepting the quest
+    /// first if the photo was started from the Quests sheet).
     private func takePhoto() {
-        #if targetEnvironment(simulator)
-        // No camera in the Simulator: submit a generated test image.
-        Task { await services.questCapture.capture(DevHarnessView.testImage()) }
-        #else
-        showCamera = true
-        #endif
+        if !isOnQuest { acceptQuest() }
+        withAnimation(ActiveQuestCard.cameraTransition) { isCameraOpen = true }
     }
 
-    private var cameraSheet: some View {
-        ZStack(alignment: .bottom) {
-            CameraPreview(session: camera.session).ignoresSafeArea()
-            Button {
-                Task {
-                    if let photo = try? await camera.capturePhoto() {
-                        showCamera = false
-                        camera.stop()
-                        await services.questCapture.capture(photo)
-                    }
-                }
-            } label: {
-                Circle().fill(.white).frame(width: 72, height: 72)
-            }
-            .accessibilityLabel("Take photo")
-            .padding(.bottom, 40)
-        }
-        .task { try? await camera.start() }
+    /// Shrinks the card back to its summary, then verifies the photo; the
+    /// result shows up in the card's status line.
+    private func submitPhoto(_ photo: CGImage) {
+        withAnimation(ActiveQuestCard.cameraTransition) { isCameraOpen = false }
+        Task { await services.questCapture.capture(photo) }
+    }
+
+    /// Figma's 542 pt camera card, kept clear of the status bar on short screens.
+    private var cameraCardHeight: CGFloat {
+        min(ActiveQuestCard.cameraHeight, visibleHeight - safeArea.top - Self.questCardBottomMargin - 16)
     }
 }
 
@@ -328,8 +326,9 @@ private struct QuestSheetContent: View {
                         .font(SideQuestDesign.ptSans(24, relativeTo: .title2))
                         .foregroundStyle(SideQuestDesign.primaryText)
                     Spacer()
+                    let participants = services.debug.participantCount(real: quest.foundTodayCount)
                     Label {
-                        Text(quest.foundTodayCount, format: .number)
+                        Text(participants, format: .number)
                     } icon: {
                         Image("QuestParticipants")
                             .renderingMode(.template)
@@ -339,7 +338,7 @@ private struct QuestSheetContent: View {
                     .padding(.vertical, 4)
                     .foregroundStyle(.white)
                     .background(statusColor, in: .capsule)
-                    .accessibilityLabel("\(quest.foundTodayCount) explorers")
+                    .accessibilityLabel("\(participants) explorers")
                 }
                 Text(quest.hint)
                     .font(.subheadline)

@@ -212,3 +212,15 @@ import Testing
         #expect(services.location.isSimulating)
     }
 }
+
+@Suite @MainActor struct DebugParticipantTests {
+    @Test func fakeParticipantsOverrideTheRealCountAndPersist() {
+        let defaults = UserDefaults(suiteName: "debug-participants-\(UUID().uuidString)")!
+        let debug = DebugSettings(defaults: defaults)
+        #expect(debug.participantCount(real: 2) == 2)
+
+        debug.fakeParticipants = true
+        #expect(debug.participantCount(real: 0) == DebugSettings.fakeParticipantCount)
+        #expect(DebugSettings(defaults: defaults).fakeParticipants)
+    }
+}

@@ -500,7 +500,7 @@ private struct QuestSheetContent: View {
     }
 }
 
-/// One quest in the sheet. Closed: icon, title, distance, finds today.
+/// One quest in the sheet. Closed: icon, title, distance, finds today (tap to open).
 /// Open: adds the hint, the capture status and the quest's own action button.
 private struct QuestOptionRow: View {
     let option: QuestOption
@@ -570,12 +570,6 @@ private struct QuestOptionRow: View {
             .foregroundStyle(.white)
             .background(tint, in: .capsule)
             .accessibilityLabel("\(participants) explorers")
-
-            Image(systemName: "chevron.down")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .rotationEffect(.degrees(isOpen ? 180 : 0))
-                .accessibilityHidden(true)
         }
         .contentShape(Rectangle())
     }

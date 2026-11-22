@@ -96,9 +96,10 @@ struct LeaderboardPage: View {
     }
 
     private var subtitle: String {
-        guard let board = model.board, let city = board.area else { return "Who's explored the most" }
+        guard let board = model.board, let area = board.area else { return "Who's explored the most" }
         let players = board.totalPlayers
-        return (players == 1 ? "1 explorer" : "\(players) explorers") + " in \(city.name)"
+        let preposition = area.kind == "campus" ? "at" : "in"
+        return (players == 1 ? "1 explorer" : "\(players) explorers") + " \(preposition) \(area.name)"
     }
 
     /// Day / week / month dropdown.
@@ -152,7 +153,7 @@ struct LeaderboardPage: View {
         if let board = model.board {
             if board.area == nil {
                 message(symbol: "map", title: "No leaderboard here yet",
-                        detail: "Leaderboards cover London for now.")
+                        detail: "The leaderboard covers Western University for now.")
             } else if board.entries.isEmpty {
                 message(symbol: "flag.checkered",
                         title: "No one has explored \(board.area?.name ?? "here") \(TerritoryFormat.phrase(for: board.period)) yet",
@@ -217,7 +218,7 @@ struct LeaderboardPage: View {
 
 // MARK: - Pieces
 
-/// Same shape as the profile's stat cards: label top-right, big value bottom-left.
+/// Solid stat card: label top-left, big value bottom-left.
 private struct MetricCard: View {
     let metric: LeaderboardMetric
     let value: String
@@ -230,7 +231,8 @@ private struct MetricCard: View {
             (isSelected ? TerritoryFormat.color(for: metric) : SideQuestDesign.metricInactive)
                 .frame(maxWidth: .infinity)
                 .frame(height: 75)
-                .overlay(alignment: .topTrailing) {
+                // Label and value both sit on the leading edge.
+                .overlay(alignment: .topLeading) {
                     HStack(spacing: 4) {
                         Image(systemName: TerritoryFormat.symbol(for: metric))
                             .font(.system(size: 12, weight: .semibold))
@@ -239,7 +241,7 @@ private struct MetricCard: View {
                             .tracking(-0.45)
                     }
                     .foregroundStyle(.white.opacity(0.9))
-                    .padding(.trailing, 10)
+                    .padding(.leading, 12)
                     .padding(.top, 8)
                 }
                 .overlay(alignment: .bottomLeading) {

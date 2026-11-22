@@ -3,14 +3,13 @@ import FogKit
 
 /// Root layout from Figma: the map page and the profile page sit in two
 /// rounded containers on a dark canvas. The handle in the gap between them
-/// drags the split, settling on sheet-like detents with spring physics.
+/// drags the split, which settles fully on one page or the other with spring
+/// physics (no halfway stop).
 struct MainView: View {
     enum SplitDetent: CaseIterable {
         /// Map fills the screen; the profile peeks at the bottom (Figma default).
         case map
-        /// Even split.
-        case balanced
-        /// Profile fills the screen; a strip of map stays visible on top.
+        /// Profile fills the screen; a strip of map stays visible on top (Figma 42:2159).
         case profile
     }
 
@@ -51,7 +50,7 @@ struct MainView: View {
         return ZStack(alignment: .top) {
             SideQuestDesign.canvas
 
-            ProfilePage()
+            ProfilePage(contentHeight: metrics.profileContentHeight)
                 .frame(width: metrics.size.width, height: metrics.size.height)
                 .offset(y: height + SideQuestDesign.splitGap)
 
@@ -68,6 +67,10 @@ struct MainView: View {
                     style: .continuous
                 )
             )
+            .contentShape(Rectangle())
+            // The map is only a backdrop while the profile is open: no panning
+            // it, and touches can't leak through to it from the profile.
+            .allowsHitTesting(isOnQuest || (detent == .map && dragStartHeight == nil))
 
             splitHandle(metrics: metrics, currentHeight: height)
                 .offset(y: height + SideQuestDesign.splitGap / 2 - Self.handleHitHeight / 2)
@@ -86,6 +89,12 @@ struct MainView: View {
     private var isOnQuest: Bool { services.expeditions.active != nil }
 
     private static let handleHitHeight: CGFloat = 52
+
+    /// Map height with the profile open: Figma's 88 pt strip on a 62 pt status
+    /// bar, i.e. 26 pt of map below the status bar.
+    static func collapsedMapHeight(safeAreaTop: CGFloat) -> CGFloat {
+        safeAreaTop + 26
+    }
 
     private func splitHandle(metrics: SplitMetrics, currentHeight: CGFloat) -> some View {
         Capsule()
@@ -123,7 +132,7 @@ struct MainView: View {
                     }
             )
             .onTapGesture {
-                settle(to: detent == .map ? .balanced : .map, from: currentHeight, velocity: 0, metrics: metrics)
+                settle(to: detent == .map ? .profile : .map, from: currentHeight, velocity: 0, metrics: metrics)
             }
             .accessibilityElement()
             .accessibilityLabel("Map and profile divider")
@@ -146,7 +155,6 @@ struct MainView: View {
     private var accessibilityValue: String {
         switch detent {
         case .map: "Map expanded"
-        case .balanced: "Split evenly"
         case .profile: "Profile expanded"
         }
     }
@@ -160,14 +168,20 @@ struct MainView: View {
     }
 }
 
-/// Geometry for the map/profile split, derived from the Figma frame
-/// (874 pt tall: map 786 pt, 21 pt gap, profile peeking below).
+/// Geometry for the map/profile split, derived from the Figma frames
+/// (874 pt tall: map 786 pt, 21 pt gap, profile peeking below; with the
+/// profile open the map shrinks to an 88 pt strip under the status bar).
 private struct SplitMetrics {
     let size: CGSize
     let safeArea: EdgeInsets
 
     private var profilePeek: CGFloat { 67 }
-    private var minimumMapHeight: CGFloat { safeArea.top + 118 }
+    private var minimumMapHeight: CGFloat { MainView.collapsedMapHeight(safeAreaTop: safeArea.top) }
+
+    /// Height of the profile container when it's fully open.
+    var profileContentHeight: CGFloat {
+        size.height - height(for: .profile) - SideQuestDesign.splitGap
+    }
 
     /// Map height while a quest is active: edge to edge. (Figma stops 10 pt
     /// short, which reads as a stray dark band against the device's corners.)
@@ -181,8 +195,6 @@ private struct SplitMetrics {
         switch detent {
         case .map:
             max(size.height - SideQuestDesign.splitGap - profilePeek, minimumMapHeight)
-        case .balanced:
-            ((size.height - SideQuestDesign.splitGap) / 2).rounded()
         case .profile:
             minimumMapHeight
         }
@@ -193,11 +205,3 @@ private struct SplitMetrics {
     }
 }
 
-/// Placeholder profile container (Figma "profile page"): intentionally empty for now.
-struct ProfilePage: View {
-    var body: some View {
-        RoundedRectangle(cornerRadius: SideQuestDesign.containerCornerRadius, style: .continuous)
-            .fill(SideQuestDesign.profileSurface)
-            .accessibilityLabel("Profile")
-    }
-}

@@ -68,8 +68,7 @@ struct ActiveQuestCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 // Live, self-updating elapsed time since the quest was accepted.
                 Text(timerInterval: startedAt ... Date.distantFuture, countsDown: false)
-                    // Figma uses Cal Sans 65; it isn't bundled, so a bold system face stands in.
-                    .font(.system(size: 65, weight: .bold))
+                    .font(SideQuestDesign.calSans(65, relativeTo: nil))
                     .tracking(-0.65)
                     .monospacedDigit()
                     .lineLimit(1)

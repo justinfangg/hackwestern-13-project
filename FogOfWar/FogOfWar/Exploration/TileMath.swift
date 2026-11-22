@@ -44,6 +44,15 @@ nonisolated public struct TileMath: Sendable {
         return H3CellID(rawValue: cell.id)
     }
 
+    /// Average area of a resolution-11 H3 hexagon (H3 reference tables).
+    public static let averageCellAreaSquareMeters = 2_149.643
+
+    /// Center of a cell, or `nil` for an invalid id. Cheaper than `geometry(for:)`.
+    public func centerCoordinate(of id: H3CellID) -> CLLocationCoordinate2D? {
+        guard let cell = try? h3Cell(for: id) else { return nil }
+        return try? cell.center.coordinates
+    }
+
     func geometry(for id: H3CellID) throws -> CellGeometry {
         try geometry(for: h3Cell(for: id))
     }

@@ -16,11 +16,37 @@ public final class DebugSettings {
     /// Show every quest as having `fakeParticipantCount` explorers (demo: avatars, "+N" pill).
     public var fakeParticipants: Bool { didSet { defaults.set(fakeParticipants, forKey: Keys.fakeParticipants) } }
 
+    /// Demo values for the profile's stat cards; `nil` shows the real numbers.
+    public var cityExploredPercentOverride: Double? {
+        didSet { defaults.set(cityExploredPercentOverride, forKey: Keys.cityPercent) }
+    }
+    public var cityNameOverride: String? {
+        didSet { defaults.set(cityNameOverride, forKey: Keys.cityName) }
+    }
+    public var distanceKmOverride: Double? {
+        didSet { defaults.set(distanceKmOverride, forKey: Keys.distanceKm) }
+    }
+
     public static let fakeParticipantCount = 6
 
     /// The participant count to display for a quest whose real count is `real`.
     public func participantCount(real: Int) -> Int {
         fakeParticipants ? Self.fakeParticipantCount : real
+    }
+
+    /// The city-explored percentage (0…100) to display.
+    public func cityExploredPercent(real: Double?) -> Double? {
+        cityExploredPercentOverride ?? real
+    }
+
+    /// The city name to display on the profile.
+    public func cityName(real: String?) -> String? {
+        cityNameOverride ?? real
+    }
+
+    /// Total quest distance to display, in meters.
+    public func distanceMeters(real: Double) -> Double {
+        distanceKmOverride.map { $0 * 1000 } ?? real
     }
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -29,6 +55,8 @@ public final class DebugSettings {
         static let unlocked = "debug.unlocked", simulator = "debug.simulator"
         static let onDevice = "debug.onDeviceVerifier", mock = "debug.mockBackend"
         static let fakeParticipants = "debug.fakeParticipants"
+        static let cityPercent = "debug.profile.cityPercent", cityName = "debug.profile.cityName"
+        static let distanceKm = "debug.profile.distanceKm"
     }
 
     public init(defaults: UserDefaults = .standard) {
@@ -38,6 +66,9 @@ public final class DebugSettings {
         useOnDeviceVerifier = defaults.bool(forKey: Keys.onDevice)
         useMockBackend = defaults.bool(forKey: Keys.mock)
         fakeParticipants = defaults.bool(forKey: Keys.fakeParticipants)
+        cityExploredPercentOverride = defaults.object(forKey: Keys.cityPercent) as? Double
+        cityNameOverride = defaults.string(forKey: Keys.cityName)
+        distanceKmOverride = defaults.object(forKey: Keys.distanceKm) as? Double
     }
 }
 

@@ -48,6 +48,41 @@ public struct DebugMenuView: View {
             } footer: {
                 Text("Overrides the real participant count everywhere it's shown.")
             }
+            Section {
+                Toggle("Override city explored", isOn: overrideBinding(\.cityExploredPercentOverride, default: 31))
+                if let percent = settings.cityExploredPercentOverride {
+                    HStack {
+                        TextField("Percent", value: optionalBinding(\.cityExploredPercentOverride, default: percent),
+                                  format: .number.precision(.fractionLength(0...2)))
+                            .decimalKeyboard()
+                        Text("%").foregroundStyle(.secondary)
+                    }
+                    Slider(value: optionalBinding(\.cityExploredPercentOverride, default: percent), in: 0...100, step: 1)
+                }
+
+                Toggle("Override city name", isOn: Binding(
+                    get: { settings.cityNameOverride != nil },
+                    set: { settings.cityNameOverride = $0 ? (settings.cityNameOverride ?? "London") : nil }))
+                if settings.cityNameOverride != nil {
+                    TextField("City", text: Binding(
+                        get: { settings.cityNameOverride ?? "" },
+                        set: { settings.cityNameOverride = $0 }))
+                }
+
+                Toggle("Override distance traveled", isOn: overrideBinding(\.distanceKmOverride, default: 129))
+                if let km = settings.distanceKmOverride {
+                    HStack {
+                        TextField("Distance", value: optionalBinding(\.distanceKmOverride, default: km),
+                                  format: .number.precision(.fractionLength(0...1)))
+                            .decimalKeyboard()
+                        Text("km").foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Profile stats")
+            } footer: {
+                Text("Shown on the profile's green (city explored) and blue (distance) cards instead of the real numbers.")
+            }
             Section("Status") {
                 LabeledContent("Source", value: location.isSimulating ? "Simulator" : "GPS")
                 if let c = location.currentCoordinate {
@@ -63,6 +98,20 @@ public struct DebugMenuView: View {
         }
     }
 
+    /// On/off switch for an optional override; turning it on starts at `value`.
+    private func overrideBinding(_ keyPath: ReferenceWritableKeyPath<DebugSettings, Double?>,
+                                 default value: Double) -> Binding<Bool> {
+        Binding(get: { settings[keyPath: keyPath] != nil },
+                set: { settings[keyPath: keyPath] = $0 ? (settings[keyPath: keyPath] ?? value) : nil })
+    }
+
+    /// Edits an override that is currently on, clamped to zero or more.
+    private func optionalBinding(_ keyPath: ReferenceWritableKeyPath<DebugSettings, Double?>,
+                                 default value: Double) -> Binding<Double> {
+        Binding(get: { settings[keyPath: keyPath] ?? value },
+                set: { settings[keyPath: keyPath] = max($0, 0) })
+    }
+
     private func startDemoRoute() {
         do {
             location.simulatorAutoWalk(try GPXParser.bundledDemoRoute())
@@ -70,5 +119,16 @@ public struct DebugMenuView: View {
         } catch {
             routeError = "Couldn't load demo-route.gpx"
         }
+    }
+}
+
+private extension View {
+    /// Number pad on iOS; no-op elsewhere (FogKit also builds for macOS).
+    @ViewBuilder func decimalKeyboard() -> some View {
+        #if os(iOS)
+        keyboardType(.decimalPad)
+        #else
+        self
+        #endif
     }
 }

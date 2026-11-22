@@ -4,6 +4,11 @@
      Kept outside the FogOfWar/ source folder so Xcode doesn't also copy it as a resource. -->
 <plist version="1.0">
 <dict>
+	<key>UIAppFonts</key>
+	<array>
+		<string>CalSans-Regular.ttf</string>
+		<string>PTSans-Regular.ttf</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

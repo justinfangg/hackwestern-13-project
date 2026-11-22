@@ -87,7 +87,7 @@ struct MapPage: View {
     /// bar so the player's dot never hides behind the Dynamic Island.
     private var mapShift: CGFloat {
         let expanded = fullSize.height - 88   // Figma map height (874 → 786)
-        let collapsed = safeArea.top + 118    // MainView's profile detent
+        let collapsed = MainView.collapsedMapHeight(safeAreaTop: safeArea.top)
         guard expanded > collapsed else { return 0 }
         let progress = min(max((expanded - visibleHeight) / (expanded - collapsed), 0), 1)
         return safeArea.top / 2 * progress
@@ -257,7 +257,8 @@ struct MapPage: View {
 
     @ViewBuilder
     private var recenterButton: some View {
-        if !isFollowingUser {
+        // Hidden in the collapsed strip above the open profile.
+        if !isFollowingUser && chromeOpacity > 0.5 {
             Button {
                 recenterToken &+= 1
             } label: {

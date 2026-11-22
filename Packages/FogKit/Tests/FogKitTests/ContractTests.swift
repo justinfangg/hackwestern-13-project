@@ -324,3 +324,39 @@ final class AuthStubURLProtocol: URLProtocol, @unchecked Sendable {
         #expect(model.board?.metric == .time)
     }
 }
+
+// MARK: - Feed (§8)
+
+@Suite struct FeedContractTests {
+    @Test func feedDecodes() throws {
+        let r = try JSONCoding.decoder.decode(FeedResponse.self, from: mockData("feed.200.json"))
+        #expect(r.posts.count == 2 && r.nextBefore != nil)
+        let first = r.posts[0]
+        #expect(first.author.name == "mapmaker_ana" && !first.author.isMe)
+        #expect(first.durationS == 2539 && first.newTiles == 184 && first.area?.kind == "campus")
+        #expect(first.sticker?.category == "bench" && first.sticker?.placeName == "University College Hill")
+        #expect(r.posts[1].author.isMe && r.posts[1].area == nil && r.posts[1].sticker == nil)
+        let pace = try #require(first.paceSecondsPerKm)
+        #expect(abs(pace - 2539 / 3.1046) < 0.01)
+    }
+}
+
+@Suite @MainActor struct FeedModelTests {
+    @Test func pagesThroughTheFeed() async {
+        let model = FeedModel(api: MockFogAPI(latency: .zero), pageSize: 4)
+        await model.refresh()
+        #expect(model.hasLoaded && model.posts.count == 4 && model.hasMore)
+        #expect(model.posts.map(\.endedAt) == model.posts.map(\.endedAt).sorted(by: >))
+
+        // Not near the end yet: no request.
+        await model.loadMoreIfNeeded(after: model.posts[0])
+        #expect(model.posts.count == 4)
+
+        await model.loadMoreIfNeeded(after: model.posts[3])
+        #expect(model.posts.count == MockFogAPI.sampleFeed().count && !model.hasMore)
+        #expect(Set(model.posts.map(\.id)).count == model.posts.count)
+
+        await model.refresh()
+        #expect(model.posts.count == 4 && model.hasMore)
+    }
+}

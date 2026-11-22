@@ -445,3 +445,82 @@ public struct LeaderboardResponse: Codable, Sendable {
     /// The caller's row, also when outside the top 50; nil if they have no score here yet.
     public var me: LeaderboardEntry?
 }
+
+// MARK: - GET feed (docs/api.md §8)
+
+/// One finished session in the social feed.
+public struct FeedPost: Hashable, Codable, Sendable, Identifiable {
+    public struct Author: Hashable, Codable, Sendable {
+        public var id: UUID
+        public var name: String
+        public var isMe: Bool
+        public init(id: UUID, name: String, isMe: Bool) {
+            self.id = id
+            self.name = name
+            self.isMe = isMe
+        }
+    }
+
+    /// The territory the session started in.
+    public struct Area: Hashable, Codable, Sendable {
+        public var name: String
+        /// "campus", "park" or "neighbourhood".
+        public var kind: String
+        public init(name: String, kind: String) {
+            self.name = name
+            self.kind = kind
+        }
+    }
+
+    /// The sticker from a quest found during the session.
+    public struct Find: Hashable, Codable, Sendable {
+        public var url: URL
+        public var category: String
+        public var placeName: String?
+        public init(url: URL, category: String, placeName: String?) {
+            self.url = url
+            self.category = category
+            self.placeName = placeName
+        }
+    }
+
+    /// The expedition's id.
+    public var id: UUID
+    public var author: Author
+    public var startedAt: Date
+    public var endedAt: Date
+    public var durationS: Int
+    public var distanceM: Double
+    public var newTiles: Int
+    public var area: Area?
+    public var sticker: Find?
+
+    public init(id: UUID, author: Author, startedAt: Date, endedAt: Date, durationS: Int,
+                distanceM: Double, newTiles: Int, area: Area?, sticker: Find?) {
+        self.id = id
+        self.author = author
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.durationS = durationS
+        self.distanceM = distanceM
+        self.newTiles = newTiles
+        self.area = area
+        self.sticker = sticker
+    }
+
+    /// Average pace in seconds per km (nil for sessions too short to say).
+    public var paceSecondsPerKm: Double? {
+        distanceM >= 100 && durationS > 0 ? Double(durationS) / (distanceM / 1000) : nil
+    }
+}
+
+public struct FeedResponse: Codable, Sendable {
+    /// Newest first.
+    public var posts: [FeedPost]
+    /// Pass back as `before` to load older posts; nil when there are no more.
+    public var nextBefore: Date?
+    public init(posts: [FeedPost], nextBefore: Date?) {
+        self.posts = posts
+        self.nextBefore = nextBefore
+    }
+}

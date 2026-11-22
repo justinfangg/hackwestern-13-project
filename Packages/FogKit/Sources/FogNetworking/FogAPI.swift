@@ -45,6 +45,8 @@ public protocol FogAPI: Sendable {
     func leaderboardAreas(near location: Coordinate?) async throws -> LeaderboardAreasResponse
     /// Ranking for one area and metric (§7).
     func leaderboard(area: String, metric: LeaderboardMetric) async throws -> LeaderboardResponse
+    /// Finished sessions from everyone, newest first (§8). `before` pages back from `nextBefore`.
+    func feed(before: Date?, limit: Int) async throws -> FeedResponse
 }
 
 extension FogAPI {
@@ -94,6 +96,16 @@ public final class LiveFogAPI: FogAPI {
     public func leaderboard(area: String, metric: LeaderboardMetric) async throws -> LeaderboardResponse {
         try await call("leaderboard", query: [URLQueryItem(name: "area", value: area),
                                               URLQueryItem(name: "metric", value: metric.rawValue)])
+    }
+
+    public func feed(before: Date?, limit: Int) async throws -> FeedResponse {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let before {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            query.append(URLQueryItem(name: "before", value: formatter.string(from: before)))
+        }
+        return try await call("feed", query: query)
     }
 
     // MARK: Plumbing
@@ -276,6 +288,42 @@ public actor MockFogAPI: FogAPI {
         }
         return LeaderboardResponse(area: .init(id: a.id, name: a.name, kind: a.kind, totalTiles: a.totalTiles),
                                    metric: metric, totalPlayers: entries.count, entries: entries, me: me)
+    }
+
+    // Fake feed so the social page works offline: a few days of sessions from other players.
+    public static func sampleFeed(now: Date = Date(), myName: String? = nil) -> [FeedPost] {
+        let stickerBase = "https://example.invalid/stickers/"
+        func post(_ n: Int, _ name: String, isMe: Bool = false, hoursAgo: Double, minutes: Int, km: Double, tiles: Int,
+                  area: (String, String)?, find: (String, String)? = nil) -> FeedPost {
+            let end = now.addingTimeInterval(-hoursAgo * 3600)
+            return FeedPost(
+                id: UUID(uuidString: String(format: "00000000-0000-4000-8000-%012d", n))!,
+                author: .init(id: UUID(uuidString: String(format: "00000000-0000-4000-9000-%012d", n))!, name: name, isMe: isMe),
+                startedAt: end.addingTimeInterval(-Double(minutes * 60)), endedAt: end,
+                durationS: minutes * 60, distanceM: km * 1000, newTiles: tiles,
+                area: area.map { .init(name: $0.0, kind: $0.1) },
+                sticker: find.map { .init(url: URL(string: stickerBase + $0.0 + ".png")!, category: $0.0, placeName: $0.1) })
+        }
+        return [
+            post(1, "mapmaker_ana", hoursAgo: 0.4, minutes: 42, km: 3.1, tiles: 184,
+                 area: ("Western University", "campus"), find: ("bench", "University College Hill")),
+            post(2, myName ?? "Explorer 0A1B", isMe: true, hoursAgo: 2, minutes: 25, km: 1.8, tiles: 96,
+                 area: ("Gibbons Park", "park")),
+            post(3, "trailblazer", hoursAgo: 5.5, minutes: 68, km: 5.4, tiles: 312,
+                 area: ("Downtown London", "neighbourhood"), find: ("mural", "Dundas Place")),
+            post(4, "fogbuster", hoursAgo: 23, minutes: 18, km: 1.2, tiles: 41, area: nil),
+            post(5, "nightowl_99", hoursAgo: 27, minutes: 51, km: 3.9, tiles: 207,
+                 area: ("Western University", "campus"), find: ("statue", "Middlesex College")),
+            post(6, "campus_rat", hoursAgo: 49, minutes: 33, km: 2.2, tiles: 120, area: ("Western University", "campus")),
+        ]
+    }
+
+    public func feed(before: Date?, limit: Int) async throws -> FeedResponse {
+        try await Task.sleep(for: latency)
+        let all = Self.sampleFeed(myName: username)
+        let page = all.filter { before == nil || $0.endedAt < before! }.prefix(limit)
+        let more = page.count == limit && all.last != page.last
+        return FeedResponse(posts: Array(page), nextBefore: more ? page.last?.endedAt : nil)
     }
 
     static func error(_ status: Int, _ code: String, _ message: String) -> APIError {

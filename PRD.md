@@ -28,7 +28,7 @@ Only work pushed to `main` is counted.
 | Map page, cloud fog visuals, active-quest card, quest sheet, quest camera screen | Jonathan | ✅ | `FogOfWar/FogOfWar/UI/` |
 | **Tab-bar navigation** (Figma 55:3722): Social / Map / Leaderboard pages that slide left and right, each rounded to the iPhone's screen corners. Replaces the old map-over-profile split | Jonathan | ✅ | `UI/MainView.swift`, `UI/MainTabBar.swift` |
 | Map chrome from the new design: city name at the top, profile button top right (opens Profile as a sheet), locate button bottom right, wider Quests sheet with an **Explore** button | Jonathan | ✅ UI; ⬜ Explore does nothing yet | `UI/MapPage.swift`, `UI/QuestSheet.swift` |
-| Social page (first tab) | Jonathan | 🟡 empty placeholder | `Social/SocialPage.swift` |
+| **Social activity feed** (first tab): Instagram-style scrolling feed, one post per finished session from every player (author, area, time ago, infographic, caption); pull to refresh, loads older posts on scroll. `feed` Edge Function, `FeedModel`, template `SessionInfographic` | Justin (feed) · Jonathan (infographic design) | ✅ feed + template (smoke 35/35 locally, 69 FogKit tests); ⬜ `feed` not deployed yet; 🟡 infographic is a placeholder design for Jonathan to replace | `supabase/functions/feed/`, `Social/` |
 | Profile page: name, distance, city coverage, sticker board. Now opened from the profile button on the map | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
 | Onboarding (username + permission screens) | Jonathan | ⬜ | |
 | Designed expedition recap card | Jonathan | ⬜ (the app still uses Justin's plain `RecapSheet` from `Dev/`) | |
@@ -53,7 +53,7 @@ Only work pushed to `main` is counted.
 
 **Backend on `SideQuest`**
 
-0. **Finish the rebuild:** run `supabase db push --remote` to apply `20261122000001_territory.sql`, then deploy the `leaderboard` function (`supabase functions deploy leaderboard`). Until then the Leaderboard tab can't load. Check that `GEMINI_API_KEY` is set and the model name in `GEMINI_MODEL` is valid for that key. Or point the app back at the original project in `SupabaseConfig.swift` (Justin).
+0. **Finish the rebuild:** run `supabase db push --remote` to apply `20261122000001_territory.sql`, then deploy the `leaderboard` and `feed` functions (`supabase functions deploy leaderboard feed`) and run `npm run db:seed-areas`. Until then the Leaderboard and Social tabs can't load. Check that `GEMINI_API_KEY` is set and the model name in `GEMINI_MODEL` is valid for that key. Or point the app back at the original project in `SupabaseConfig.swift` (Justin).
 
 **Jonathan (UI)**
 1. **Real stickers in Profile:** replace the placeholder `BoardSticker`s with `services.profile.stickers` (`imageURL`, or `localImageURL` right after capture), and show `missedDays` as greyed-out silhouettes.
@@ -62,7 +62,7 @@ Only work pushed to `main` is counted.
 4. **Designed expedition recap card** to replace `RecapSheet` (export with `ShareImage.render`). Then delete `Dev/`.
 5. **Place `PathTraceMapView`** (Ayman's) in Profile, using `services.profile.routeSegments`.
 6. **Streak and weekly chart** in Profile, if they're in the design (`services.profile.stats.currentStreak`, `weeklyActivity`).
-6a. **Social page content** (first tab; empty for now) and the **Explore** button's free-roam mode.
+6a. **Session infographic design** in `Social/SessionInfographic.swift` (the feed is built; replace the template's body, keep `init(post:)` and the square shape; the header comment lists the data available), and the **Explore** button's free-roam mode.
 6b. **Real display-corner radius:** the tab pages are rounded with UIKit's private `_displayCornerRadius` (fallback 55 pt). Fine for the hackathon; replace with a fixed value before any App Store build.
 
 **Justin**
@@ -246,7 +246,7 @@ Priority: **P0** = must ship · **P1** = polish, done once all P0s work end to e
 | N-4 | Map top bar: current city name centered, profile button at the top right that opens Profile as a sheet | P0 |
 | N-5 | Locate button at the bottom right of the map, above the Quests sheet, recenters on the player and resumes following. Hidden while the quest sheet is expanded or the camera is open | P0 |
 | N-6 | Quests sheet is wide, sits above the tab bar, and has an Explore button on its right for free-roam exploration | P1 (button only; no behavior yet) |
-| N-7 | Social page (first tab) | P1 (empty placeholder) |
+| N-7 | Social page (first tab): activity feed of everyone's finished sessions, newest first, each post an infographic of the session's metrics (and its sticker if a quest was found) | P1 |
 
 ## 9. Information Architecture / Screens
 
@@ -255,7 +255,7 @@ Three tabs in a bottom tab bar (Figma 55:3722). Switching slides the pages left 
 ```
 Tab bar:  Social  |  Map (default)  |  Leaderboard
 ├── Social
-│   └── Empty for now
+│   └── Activity feed: one post per finished session (author, area, time ago, session infographic, caption)
 ├── Map
 │   ├── Fog map + user avatar + quest marker
 │   ├── Top: city name (centered), profile button (top right → opens Profile sheet)

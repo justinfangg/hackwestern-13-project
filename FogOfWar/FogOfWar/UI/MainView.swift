@@ -67,7 +67,8 @@ struct MainView: View {
         switch tab {
         case .social:
             if visited.contains(.social) {
-                SocialPage().safeAreaPadding(safeArea)
+                SocialPage(bottomInset: max(MainTabBar.reservedHeight - safeArea.bottom, 0) + 8)
+                    .safeAreaPadding(safeArea)
             } else {
                 SideQuestDesign.canvas
             }

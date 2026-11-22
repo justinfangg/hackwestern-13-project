@@ -35,6 +35,7 @@ public final class FogServices {
     public let questCapture: QuestCaptureModel
     public let profile: ProfileModel
     public let leaderboard: LeaderboardModel
+    public let feed: FeedModel
     public let api: FogAPI
     public let usingMockBackend: Bool
     /// Tiles restored from the server at launch (nil until a restore happened).
@@ -77,6 +78,7 @@ public final class FogServices {
                                          location: location)
         profile = ProfileModel(api: api, history: history)
         leaderboard = LeaderboardModel(api: api)
+        feed = FeedModel(api: api)
 
         wire()
         applyDebugSettings()
@@ -120,7 +122,7 @@ public final class FogServices {
 
     private func wire() {
         let sync = self.sync, history = self.history, expeditions = self.expeditions
-        let pipeline = self.pipeline, quests = self.quests, profile = self.profile
+        let pipeline = self.pipeline, quests = self.quests, profile = self.profile, feed = self.feed
 
         pipeline.onTilesCleared = { sync.enqueue(tiles: $0) }
         pipeline.onPing = { sync.enqueue(ping: $0) }
@@ -135,7 +137,11 @@ public final class FogServices {
         expeditions.onEnd = { summary in
             history.add(summary)
             sync.enqueue(expedition: summary)
-            Task { await sync.flush() }
+            // Once the session reaches the server it's a post in the feed.
+            Task {
+                await sync.flush()
+                await feed.refresh()
+            }
         }
 
         questCapture.onQuestStale = { [weak self] in

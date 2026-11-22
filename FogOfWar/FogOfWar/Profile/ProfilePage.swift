@@ -18,8 +18,6 @@ struct ProfilePage: View {
     @State private var isFocused = false
     /// Top-left of this page in global coordinates, to place the flying sticker.
     @State private var pageOrigin: CGPoint = .zero
-    /// Opens the territory leaderboard on this metric (trophy button or a stat card).
-    @State private var territoryMetric: LeaderboardMetric?
 
     // Figma offsets from the top of the profile container.
     private static let horizontalMargin: CGFloat = 28
@@ -76,10 +74,6 @@ struct ProfilePage: View {
             percentExplored = await coverage.percentExplored(by: explorationStore.clearedCells)
         }
         .task { await services.profile.refresh() }
-        .fullScreenCover(item: $territoryMetric) { metric in
-            LeaderboardPage(initialMetric: metric)
-                .environment(services)
-        }
     }
 
     private var profileContent: some View {
@@ -254,16 +248,6 @@ struct ProfilePage: View {
 
             Spacer(minLength: 12)
 
-            Button { territoryMetric = .percent } label: {
-                Image(systemName: "trophy.fill")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(SideQuestDesign.questActive)
-                    .frame(width: 50, height: 50)
-                    .background(Circle().fill(SideQuestDesign.primaryText))
-            }
-            .padding(.trailing, 8)
-            .accessibilityLabel("Leaderboard")
-
             Image("ProfileAvatar")
                 .resizable()
                 .frame(width: 50, height: 50)
@@ -275,39 +259,29 @@ struct ProfilePage: View {
 
     private var stats: some View {
         HStack(spacing: 18) {
-            Button { territoryMetric = .percent } label: {
             ProfileStatCard(
                 value: Self.percentText(displayedPercent),
                 label: cityName ?? "Your city",
                 color: SideQuestDesign.cityCard,
                 accessibilityText: "Explored \(Self.percentText(displayedPercent)) of \(cityName ?? "your city")",
-                labelTrailing: 11,
                 labelTop: 9
             ) {
                 Image("ProfileCityGlyph")
                     .frame(width: 102, height: 102)
                     .offset(x: -41, y: -6)
             }
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens the territory leaderboard")
 
-            Button { territoryMetric = .distance } label: {
             ProfileStatCard(
                 value: Self.distanceText(totalDistanceMeters),
                 label: "Traveled",
                 color: SideQuestDesign.travelCard,
                 accessibilityText: "Traveled \(Self.distanceText(totalDistanceMeters)) on quests",
-                labelTrailing: 10,
                 labelTop: 8
             ) {
                 Image("ProfileTravelGlyph")
                     .frame(width: 69.3332, height: 80.008)
                     .offset(x: -8.67, y: -1.67)
             }
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens the territory leaderboard")
         }
     }
 
@@ -362,7 +336,6 @@ private struct ProfileStatCard<Glyph: View>: View {
     let label: String
     let color: Color
     let accessibilityText: String
-    let labelTrailing: CGFloat
     let labelTop: CGFloat
     @ViewBuilder let glyph: Glyph
 
@@ -372,15 +345,16 @@ private struct ProfileStatCard<Glyph: View>: View {
             .frame(height: 75)
             // Overlays so the glyph (taller than the card) can't size the card.
             .overlay(alignment: .topLeading) { glyph }
-            .overlay(alignment: .topTrailing) {
+            // Label and value both sit on the leading edge.
+            .overlay(alignment: .topLeading) {
                 Text(label)
                     .font(SideQuestDesign.ptSans(fixed: 17))
                     .tracking(-0.51)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    .padding(.leading, 60)
-                    .padding(.trailing, labelTrailing)
+                    .padding(.leading, 15)
+                    .padding(.trailing, 10)
                     .padding(.top, labelTop)
             }
             .overlay(alignment: .bottomLeading) {

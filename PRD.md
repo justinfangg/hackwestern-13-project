@@ -16,10 +16,10 @@ Only work pushed to `main` is counted.
 |---|---|---|---|
 | PRD, team split, tech stack | All | ✅ | `PRD.md` |
 | Xcode app project (iOS 17+, iPhone portrait, permissions, background location) | Justin | ✅ | `FogOfWar/` |
-| FogKit: location pipeline, Simulator Mode, expeditions, quest capture, camera, sticker cutout, networking, sync, anonymous sign-in, fog restore. 64 tests | Justin | ✅ (not yet tested on a real iPhone) | `Packages/FogKit/` |
+| FogKit: location pipeline, Simulator Mode, expeditions (quest or free run), quest capture, camera, sticker cutout, networking, sync, anonymous sign-in, fog restore, feed, leaderboard, several quests a day. 76 tests | Justin | ✅ (not yet tested on a real iPhone) | `Packages/FogKit/` |
 | API contract v0.2 + mocks, decisions D1–D12 settled | Vishaal → Justin | ✅ | `docs/api.md`, `docs/mocks/` |
-| Supabase project: schema with row-level security, `stickers` + `quest-photos` buckets, anonymous sign-in, `GEMINI_API_KEY` secret. Originally `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1); **the app now points at a rebuilt project, `SideQuest` (ref `qsxakuynoyxsyxhkxvuo`)** with Jonathan's own Gemini key (see "Changed since the original plan") | Justin → Jonathan | ✅ (territory migration, `leaderboard` and `feed` deployed 2026-11-22) | `supabase/` |
-| Edge Functions `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST), deployed. Smoke test 24/24 | Justin | ✅ | `supabase/functions/`, `scripts/functions/smoke.mjs` |
+| Supabase project: schema with row-level security, `stickers` + `quest-photos` buckets, anonymous sign-in, `GEMINI_API_KEY` secret. Originally `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1); **the app now points at a rebuilt project, `SideQuest` (ref `qsxakuynoyxsyxhkxvuo`)** with Jonathan's own Gemini key (see "Changed since the original plan") | Justin → Jonathan | ✅ (2026-11-22: territory, multiple-quests and city-leaderboard migrations applied; `leaderboard`, `feed`, `quest-today` and `profile` redeployed) | `supabase/` |
+| Edge Functions `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST), `leaderboard`, `feed`, deployed. Smoke test 41/41 locally | Justin | ✅ | `supabase/functions/`, `scripts/functions/smoke.mjs` |
 | Daily quests from real OpenStreetMap objects on campus: **two per area per day** (different categories), seeded Nov 21–27 on `SideQuest`. The Quests sheet lists both, each with its own Accept button | Justin | ✅ | `scripts/db/seed-quests.mjs --slots 2`, `UI/MapPage.swift` |
 | Demo-account seed (expeditions on real footpaths, stickers, 4-day streak, missed days) | Justin | ✅ script ready; ⬜ not yet run for the demo phone | `scripts/db/seed-demo.mjs` |
 | App connected to the live backend | Justin | ✅ | `FogOfWar/FogOfWar/Config/SupabaseConfig.swift` |
@@ -27,16 +27,16 @@ Only work pushed to `main` is counted.
 | H3 fog map: `ExplorationStore` (SwiftData), `TileMath`, `FogRenderer`, quest marker, `PathTraceMapView` | Ayman | ✅ (performance with thousands of tiles untested on a phone) | `FogOfWar/FogOfWar/Exploration/`, `Map/` |
 | Map page, cloud fog visuals, active-quest card, quest sheet, quest camera screen | Jonathan | ✅ | `FogOfWar/FogOfWar/UI/` |
 | **Tab-bar navigation** (Figma 55:3722): Social / Map / Leaderboard pages that slide left and right, each rounded to the iPhone's screen corners. Replaces the old map-over-profile split | Jonathan | ✅ | `UI/MainView.swift`, `UI/MainTabBar.swift` |
-| Map chrome from the new design: city name at the top, profile button top right (opens Profile as a sheet), locate button bottom right, wider Quests sheet with an **Explore** button | Jonathan (UI) · Justin (Explore free run) | ✅ | `UI/MapPage.swift`, `UI/QuestSheet.swift` |
+| Map chrome from the new design: city name at the top, profile button top right (opens Profile as a sheet), **debug button top left** (debug builds; mirrors the profile button), locate button bottom right that **rides on top of the Quests sheet** as it opens, wider Quests sheet with an **Explore** button (free run). Quests sheet rows are compact (icon, title, "80m away", finds today); **tapping a row opens it** (hint, status, its own Accept / Take photo button) and **zooms the map to that quest** | Jonathan (UI) · Justin (Explore, quest rows, zoom) | ✅ | `UI/MapPage.swift`, `UI/QuestSheet.swift`, `UI/ActiveExploreCard.swift`, `Map/FogMapView.swift` (`MapFocus`) |
 | **Social activity feed** (first tab): Instagram-style scrolling feed, one post per finished session from every player (author, area, time ago, session card); pull to refresh, loads older posts on scroll. Each post's card reuses the sticker stats design: the sticker (if a quest was found) on a blur of its own colours, Distance and Time, the **route line** (green if a quest was found, orange otherwise), and the date. No caption and no tile count. `feed` now returns `route_shape`: the route scaled into a unit square, with no coordinates (docs/api.md §8). `feed` Edge Function, `FeedModel`, `SessionInfographic` | Justin (feed) · Jonathan (card design, `route_shape`) | ✅ feed + card (FogKit feed tests pass); ✅ `feed` with `route_shape` redeployed to `SideQuest` 2026-11-22; ⬜ smoke test not rerun since `route_shape` was added | `supabase/functions/feed/`, `Social/` |
-| Profile page: name, distance, city coverage, sticker board. Now opened from the profile button on the map | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
+| Profile page: name, distance, city coverage, sticker board. Opened from the profile button on the map. No leaderboard entry points (trophy button removed; the stat cards don't open anything); stat card titles left-aligned with their values | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
 | **Sticker stats** (Figma 10:46): tapping a sticker on the board opens its stats inside the Profile sheet. The sticker flies from the board to the top while the profile fades out and the stats fade in, both through a blur. It keeps the holographic tilt and reflections when dragged. Shows a heavy blur of the sticker's own colours, Distance and Time, the route on a map with Figma's "Organic edge blur" (ported to Metal) running to the bottom of the screen, and the date. An × at the top right reverses the animation. Replaces the old full-screen sticker view | Jonathan | ✅ (demo stickers have no walk attached, so they show "—" and no map; launch with `-holographic-expedition-fixture` to see sample data) | `Profile/StickerStatsView.swift`, `Profile/OrganicEdgeBlur.metal`, `Profile/ProfilePage.swift` |
 | Onboarding (username + permission screens) | Jonathan | ⬜ | |
 | Designed expedition recap card | Jonathan | ⬜ (the app still uses Justin's plain `RecapSheet` from `Dev/`) | |
-| **Leaderboard** (third tab): Western University's campus (server setting; London city boundary also loaded), ranked by % explored / time / distance for **Today, This week or This month** (dropdown next to the title). Area pills removed. City boundary from OSM; per-area territory endpoints kept for older builds | Justin | ✅ live on `SideQuest` (local smoke 41/41, 76 FogKit tests) | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
+| **Leaderboard** (third tab, titled "Leaderboard"): Western University's campus (server setting `LEADERBOARD_AREA`; London's city boundary is also loaded), ranked by % explored / time / distance for **Today, This week or This month** (dropdown right of the title; default This week). No area pills. Metric cards: only the selected one is in colour, the others grey, no border, label and value left-aligned. Per-area territory endpoints kept for older builds | Justin | ✅ live on `SideQuest` (local smoke 41/41, 76 FogKit tests) | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
 | Pitch | Vishaal | ⬜ | |
 
-**What works today:** open `FogOfWar/FogOfWar.xcodeproj` and run on the iPhone Simulator against the **live Supabase backend**. You get anonymous sign-in, today's real campus quest, Jonathan's map UI with Ayman's H3 fog clearing as you drive the joystick, expeditions with a recap, and tiles, GPS fixes and expeditions syncing to the cloud. Photo verification reaches the server but returns "verifier busy" until Gemini is fixed.
+**What works today:** open `FogOfWar/FogOfWar.xcodeproj` and run on the iPhone Simulator against the **live Supabase backend** (`SideQuest`). You get anonymous sign-in; today's two real campus quests in the Quests sheet (tap one to see it and zoom the map, then Accept); Explore free runs; Ayman's H3 fog clearing as you drive the joystick; sessions with a recap, synced to the cloud and posted to the Social feed; and the Western University leaderboard by day, week or month. Whether photo verification works depends on Jonathan's Gemini key (not yet retested).
 
 **Changed since the original plan:**
 - Vishaal handed all remaining technical work to Justin and is on the pitch full-time (§13, §15).
@@ -45,9 +45,10 @@ Only work pushed to `main` is counted.
 - Completing a quest no longer clears extra fog (Q-9 removed; §15).
 - Justin's code lives in a local Swift package (`Packages/FogKit`). Ayman's store implements FogKit's `ExplorationClearing` protocol. See `Packages/FogKit/README.md`.
 - No Apple Developer account: sign-in is Supabase anonymous auth (§15).
-- **Territory leaderboards are back in scope** (2026-11-22): per-area rankings by % explored, time and distance (§15, docs/api.md §7).
+- **Leaderboards are back in scope** (2026-11-22). First built as per-area rankings (campus, parks, Downtown); now **one leaderboard for Western University's campus**, by % explored, time or distance, for today / this week / this month (§15, docs/api.md §7).
+- **Several quests a day** (2026-11-22): two per area, each with its own row and Accept button in the Quests sheet (Q-1, docs/api.md §3).
 - **Tab-bar navigation** (2026-11-22, Figma 55:3722): the drag-to-split between map and profile is gone. A bottom tab bar switches between three full-screen pages, **Social | Map | Leaderboard**, which slide left and right (0.3 s, no bounce). Profile is no longer a page: it opens as a sheet from the avatar button at the top right of the map (§9, §15).
-- **Map chrome moved** to match the design: city name pill at the top, locate button bottom right (always visible, hidden while the quest sheet is open or the camera is up), a wider Quests sheet sitting above the tab bar. The sheet's **Explore** button starts a free run: a session with no quest target (time, distance, route, tiles).
+- **Map chrome moved** to match the design: city name pill at the top, locate button bottom right that sits on top of the Quests sheet (or the active card) and moves up with it (hidden only while the camera is up), debug button top left, a wider Quests sheet sitting above the tab bar. The sheet's **Explore** button starts a free run: a session with no quest target (time, distance, route, tiles).
 - **Feed posts show route shapes** (2026-11-22): a post now includes how the session's route looked, but never where. `feed` sends `route_shape`, the route line scaled into a unit square with north up and no coordinates or scale, so it can be drawn but not placed on a map (§11 Privacy, docs/api.md §8).
 - **Supabase rebuilt on a new project:** Jonathan recreated the backend as project `SideQuest` (ref `qsxakuynoyxsyxhkxvuo`) with his own Gemini key, and `SupabaseConfig.swift` points at it. Setup was: link the CLI, `supabase db push --remote`, create the two buckets, `supabase secrets set GEMINI_API_KEY=…`, deploy the functions, `npm run db:seed-quests`, and **turn on anonymous sign-ins in the dashboard**. With that switch off, every request is rejected and the map shows no quest.
 
@@ -55,7 +56,7 @@ Only work pushed to `main` is counted.
 
 **Backend on `SideQuest`**
 
-0. ✅ **Rebuild finished (2026-11-22):** territory migration applied, `leaderboard` and `feed` deployed, 9 areas loaded on `SideQuest`. Still check that `GEMINI_API_KEY` / `GEMINI_MODEL` work for Jonathan's key (Justin).
+0. ✅ **Rebuild finished (2026-11-22):** all migrations applied (territory, multiple quests, city leaderboard), all functions deployed, 10 areas (incl. London) and two quests per area per day (Nov 21–27) loaded on `SideQuest`. **Seed quests past Nov 27** before then (`npm run db:seed-quests`). Still check that `GEMINI_API_KEY` / `GEMINI_MODEL` work for Jonathan's key (Justin).
 
 **Jonathan (UI)**
 1. **Real stickers in Profile:** replace the placeholder `BoardSticker`s with `services.profile.stickers` (`imageURL`, or `localImageURL` right after capture), and show `missedDays` as greyed-out silhouettes.
@@ -245,9 +246,9 @@ Priority: **P0** = must ship · **P1** = polish, done once all P0s work end to e
 | N-1 | Bottom tab bar with three tabs: Social, Map (default), Leaderboard. The selected tab has a white pill behind a green icon; the pill slides between tabs | P0 |
 | N-2 | Switching tabs slides the pages left or right (about 0.3 s, no bounce). Each page is a full-screen card with the iPhone display's corner radius | P0 |
 | N-3 | The tab bar hides while a quest is active, and accepting a quest returns to the Map tab | P0 |
-| N-4 | Map top bar: current city name centered, profile button at the top right that opens Profile as a sheet | P0 |
-| N-5 | Locate button at the bottom right of the map, above the Quests sheet, recenters on the player and resumes following. Hidden while the quest sheet is expanded or the camera is open | P0 |
-| N-6 | Quests sheet is wide, sits above the tab bar, and has an Explore button on its right. Explore starts a **free run**: a session with no quest target that records time, distance, route and new tiles. A dark card (same size as the active-quest card) shows the live timer, distance and tiles with an End button; ending shows the recap and posts the session to the Activity feed | P1 ✅ |
+| N-4 | Map top bar: current city name centered, profile button at the top right that opens Profile as a sheet, debug button at the top left in the same style (debug builds only) | P0 |
+| N-5 | Locate button at the bottom right of the map, just above the Quests sheet (or the active card), recenters on the player and resumes following. It moves up with the sheet as it opens or is dragged; hidden only while the camera is open | P0 |
+| N-6 | Quests sheet is wide, sits above the tab bar, and has an Explore button on its right. Open, it lists today's quests with no header or divider: each row shows icon, title, distance ("80m away") and finds today; tapping a row opens its hint, status and Accept button and zooms the map to the quest. Explore starts a **free run**: a session with no quest target that records time, distance, route and new tiles. A dark card (same size as the active-quest card) shows the live timer, distance and tiles with an End button; ending shows the recap and posts the session to the Activity feed | P1 ✅ |
 | N-7 | Social page (first tab): activity feed of everyone's finished sessions, newest first. Each post is a square card: the sticker if a quest was found, Distance and Time, the route line drawn from `route_shape` (green if a quest was found, orange otherwise), and the date | P1 ✅ |
 
 ## 9. Information Architecture / Screens
@@ -259,17 +260,18 @@ Tab bar:  Social  |  Map (default)  |  Leaderboard
 ├── Social
 │   └── Activity feed: one post per finished session (author, area, time ago, session card: sticker, Distance/Time, route line, date)
 ├── Map
-│   ├── Fog map + user avatar + quest marker
-│   ├── Top: city name (centered), profile button (top right → opens Profile sheet)
-│   ├── Bottom right: locate button (recenter on the player)
-│   ├── Quests sheet (wide, above the tab bar): hint → Accept → Camera (unlocks at 40 m)
+│   ├── Fog map + user avatar + a beacon per quest
+│   ├── Top: debug button (top left, debug builds), city name (centered), profile button (top right → Profile sheet)
+│   ├── Bottom right: locate button (recenter), riding on top of the Quests sheet
+│   ├── Quests sheet (wide, above the tab bar): one row per quest (title, "80m away", finds today)
+│   │   → tap a row: hint + Accept, map zooms to the quest → Camera (unlocks at 40 m)
 │   │   → Verifying… → Sticker reveal; "Explore" button on its right starts a free run (no target)
 │   ├── Active-quest card while on a quest, or the free-run card while exploring (tab bar hidden)
 │   └── Expedition recap card → Share
 └── Leaderboard
-    └── Territory rankings by % / time / distance per area
+    └── Western University ranking by % / time / distance; Today · This week · This month dropdown
 
-Profile (sheet from the map's top-right button; its trophy button also opens the Leaderboard full screen)
+Profile (sheet from the map's top-right button)
     ├── Avatar, lifetime stats, streak
     ├── Sticker book grid → tap a sticker → Sticker stats in the same sheet (sticker flies to the top;
     │   Distance, Time, route map, date; × to return)
@@ -653,7 +655,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Database | **Supabase Postgres only** (changed 2026-11-21; briefly planned Tiger Data for the prize track) | One service instead of two. TimescaleDB isn't available on Supabase Postgres 17, so hypertables/continuous aggregates became plain tables and views, which are fine at hackathon scale. The Tiger prize track is no longer targeted |
 | Technical ownership | Vishaal hands all remaining technical work (Edge Functions, cloud setup, prompt, seeding) to Justin and focuses on the pitch | Lets Vishaal focus on the pitch; one person owning both sides of the API removes the biggest integration risk. Vishaal's contract and schema were high quality and are kept as-is |
 | AI verification provider | Gemini instead of Claude | Hack Western provides Gemini credits |
-| Territory leaderboards | Added back to scope: per-area rankings (campus, parks, Downtown) by % explored, time explored and distance explored. Areas from OpenStreetMap; Downtown is a hand-drawn approximation (OSM has no London neighbourhood polygons). Only usernames and totals are shown | Requested by the team; gives the demo a social/competitive angle. Paths and positions stay private |
+| Territory leaderboards | Added back to scope: per-area rankings (campus, parks, Downtown) by % explored, time explored and distance explored (later narrowed to one campus leaderboard by period, see "Leaderboard scope"). Areas from OpenStreetMap; Downtown is a hand-drawn approximation (OSM has no London neighbourhood polygons). Only usernames and totals are shown | Requested by the team; gives the demo a social/competitive angle. Paths and positions stay private |
 | Navigation | Bottom tab bar with Social, Map and Leaderboard pages that slide horizontally; Profile opens as a sheet from the map's avatar button (2026-11-22, replaces the map/profile drag split) | Matches the new Figma design (55:3722); gives Social and Leaderboard their own place and removes the split-drag gesture, which fought with map panning |
 | Backend project | The app can point at any Supabase project built from `supabase/migrations`; Jonathan's own `SideQuest` project (with his own Gemini key) is current as of 2026-11-22 | The shared key was throttled; the migrations and functions rebuild a working backend in a few commands. Anonymous sign-ins must be switched on in the dashboard or nothing loads |
 | Sign-in | Supabase anonymous sign-in + username; no Sign in with Apple | Nobody on the team has a paid Apple Developer account, which Sign in with Apple requires |

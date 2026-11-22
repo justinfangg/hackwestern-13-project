@@ -224,3 +224,22 @@ import Testing
         #expect(DebugSettings(defaults: defaults).fakeParticipants)
     }
 }
+
+@Suite @MainActor struct RestoreFogTests {
+    @Test func freshInstallRestoresTilesFromServer() async throws {
+        let api = MockFogAPI(latency: .zero)
+        let serverTiles = [TileID(hex: "8b2ab4634633fff")!, TileID(hex: "8b2ab4634613fff")!]
+        _ = try await api.sync(SyncRequest(expeditions: [], pings: [],
+                                           tiles: serverTiles.map { TileClear(h3: $0, clearedAt: Date()) }))
+        let explorer = GridExplorer()
+        let services = FogServices(explorer: explorer, auth: nil, backend: nil,
+                                   debug: DebugSettings(defaults: UserDefaults(suiteName: "restore-\(UUID())")!),
+                                   storageDirectory: tempDirectory(), api: api)
+        await services.restoreFog()
+        #expect(services.restoredTileCount == 2)
+        #expect(Set(serverTiles).isSubset(of: explorer.cleared))
+        #expect(services.sync.pendingCount == 0)    // restored tiles aren't synced back
+        await services.restoreFog()
+        #expect(services.restoredTileCount == 0)    // already on the device
+    }
+}

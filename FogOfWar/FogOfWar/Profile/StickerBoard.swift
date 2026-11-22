@@ -13,6 +13,7 @@ import SwiftUI
 struct StickerBoard: View {
     var stickers: [BoardSticker] = BoardSticker.demo
     var label: String
+    var onSelect: (BoardSticker) -> Void = { _ in }
 
     /// Maps world space (Figma board points) to the board on screen.
     struct Camera: Equatable {
@@ -161,6 +162,9 @@ struct StickerBoard: View {
                     .gesture(stickerGesture(for: sticker, viewCenter: cam.view(center)))
                     .accessibilityElement()
                     .accessibilityLabel("\(sticker.accessibilityName) sticker")
+                    .accessibilityHint("Opens the holographic sticker view")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { onSelect(sticker) }
                     .position(
                         x: center.x + (isLifted ? dragOffset.width : 0),
                         y: center.y + (isLifted ? dragOffset.height : 0)
@@ -413,6 +417,17 @@ struct StickerBoard: View {
         guard touch.stickerID == id else { return }
         liftTask?.cancel()
         liftTask = nil
+
+        // A short, stationary touch is selection. Keep this inside the existing
+        // gesture state machine so it cannot compete with peel, pan, or pinch.
+        if touch == .pending(id),
+           hypot(latestTranslation.width, latestTranslation.height) <= Self.touchSlop,
+           let sticker = stickers.first(where: { $0.id == id }) {
+            touch = .idle
+            latestTranslation = .zero
+            onSelect(sticker)
+            return
+        }
 
         if touch == .panning(id) { endPan() }
 

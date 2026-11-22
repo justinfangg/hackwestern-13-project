@@ -62,7 +62,6 @@ struct MapPage: View {
                 }
             }
             .overlay(alignment: .bottom) { bottomChrome }
-            .overlay(alignment: .bottomTrailing) { locateButton }
             .overlay(alignment: .top) { topBar }
             .animation(.smooth, value: isCameraOpen)
             .animation(.smooth, value: isQuestSheetExpanded)
@@ -286,6 +285,7 @@ struct MapPage: View {
                     onEnd: endSession
                 )
                 .padding(.horizontal, Self.questCardSideMargin)
+                .withLocateButton(locateButton, spacing: Self.locateSpacing)
                 .padding(.bottom, Self.questCardBottomMargin)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if isOnQuest, let quest = services.quests.today, let expedition = services.expeditions.active {
@@ -303,6 +303,7 @@ struct MapPage: View {
                     onPhoto: submitPhoto
                 )
                 .padding(.horizontal, Self.questCardSideMargin)
+                .withLocateButton(locateButton, spacing: Self.locateSpacing)
                 .padding(.bottom, Self.questCardBottomMargin)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
@@ -318,6 +319,8 @@ struct MapPage: View {
                     )
                 }
                 .padding(.horizontal, Self.sheetHorizontalMargin)
+                // Rides on top of the sheet as it opens (or is dragged).
+                .withLocateButton(locateButton, spacing: Self.locateSpacing)
                 .padding(.bottom, Self.sheetBottomMargin)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -387,8 +390,9 @@ struct MapPage: View {
     }
 
     /// Figma "Add Location": jumps back to the player and resumes following.
+    /// Sits just above the Quests sheet or the active card and moves with it.
     private var locateButton: some View {
-        let isHidden = isQuestSheetExpanded || isCameraOpen
+        let isHidden = isCameraOpen
         return Button {
             recenterToken &+= 1
         } label: {
@@ -400,7 +404,6 @@ struct MapPage: View {
         .accessibilityLabel("Center on my location")
         .accessibilityValue(isFollowingUser ? "Following" : "Not following")
         .padding(.trailing, Self.locateTrailingMargin)
-        .padding(.bottom, bottomChromeHeight + Self.locateSpacing)
         .opacity(isHidden ? 0 : 1)
         .scaleEffect(isHidden ? 0.6 : 1)
         .allowsHitTesting(!isHidden)
@@ -443,8 +446,6 @@ private struct QuestSheetContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Divider()
-
             if services.quests.options.isEmpty {
                 Text(services.quests.isLoading ? "Loading today's quests…" : "No quests nearby today")
                     .font(.subheadline)
@@ -648,5 +649,17 @@ enum QuestDistance {
         let m = max(meters, 0)
         if m < 1_000 { return "\(Int((m / 10).rounded()) * 10)m" }
         return (m / 1_000).formatted(.number.precision(.fractionLength(1))) + "km"
+    }
+}
+
+private extension View {
+    /// Stacks `button` above this view, right-aligned to the screen edge, so it
+    /// follows the view's top edge as it grows.
+    func withLocateButton(_ button: some View, spacing: CGFloat) -> some View {
+        VStack(alignment: .trailing, spacing: spacing) {
+            button
+            self
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }

@@ -1,0 +1,31 @@
+{
+  "posts": [
+    {
+      "id": "7b1c2d3e-4f50-4a61-9b72-83c4d5e6f701",
+      "author": { "id": "1f2e3d4c-5b6a-4789-8a9b-0c1d2e3f4a5b", "name": "mapmaker_ana", "is_me": false },
+      "started_at": "2026-11-22T14:02:11Z",
+      "ended_at": "2026-11-22T14:44:30Z",
+      "duration_s": 2539,
+      "distance_m": 3104.6,
+      "new_tiles": 184,
+      "area": { "name": "Western University", "kind": "campus" },
+      "sticker": {
+        "url": "https://febubbwoyptplfnsdqkv.supabase.co/storage/v1/object/public/stickers/1f2e3d4c-5b6a-4789-8a9b-0c1d2e3f4a5b/9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f.png",
+        "category": "bench",
+        "place_name": "University College Hill"
+      }
+    },
+    {
+      "id": "2a3b4c5d-6e7f-4801-9a2b-3c4d5e6f7a80",
+      "author": { "id": "5d6c7b8a-9f0e-4d1c-8b2a-3f4e5d6c7b8a", "name": "Explorer 5D6C", "is_me": true },
+      "started_at": "2026-11-22T11:30:00Z",
+      "ended_at": "2026-11-22T11:55:02Z",
+      "duration_s": 1502,
+      "distance_m": 1812.0,
+      "new_tiles": 96,
+      "area": null,
+      "sticker": null
+    }
+  ],
+  "next_before": "2026-11-22T11:55:02.417Z"
+}

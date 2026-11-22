@@ -168,6 +168,23 @@ try {
     "leaderboard bad metric -> invalid_request");
   check((await call(token, "leaderboard", { query: "?area=nowhere&metric=time" })).json.error?.code === "area_not_found",
     "leaderboard unknown area -> area_not_found");
+
+  // ---- feed (runs last: adds a second expedition)
+  r = await call(token, "feed", { query: "?limit=50" });
+  check(r.status === 200 && Array.isArray(r.json.posts) && !r.json.posts.some((p) => p.id === expId),
+    "feed: 30 m session is too short to post");
+  const postId = randomUUID();
+  const t1 = Date.now() - 20_000;
+  await call(token, "sync", { method: "POST", body: { expeditions: [
+    { id: postId, started_at: new Date(t1).toISOString(), ended_at: new Date(t1 + 15_000).toISOString(), distance_m: 420, new_tiles: 17 },
+  ] } });
+  r = await call(token, "feed", { query: "?limit=5" });
+  const post = r.json.posts?.find((p) => p.id === postId);
+  check(r.status === 200 && post?.author?.is_me === true && post.author.name === name && post.new_tiles === 17 && post.distance_m === 420,
+    "feed: my finished session is a post with my username", JSON.stringify(post));
+  const ends = (r.json.posts ?? []).map((p) => p.ended_at);
+  check(ends.every((e, i) => i === 0 || ends[i - 1] >= e), "feed: newest first");
+  check((await call(token, "feed", { query: "?limit=0" })).json.error?.code === "invalid_request", "feed bad limit -> invalid_request");
 } catch (e) {
   failures++;
   console.error("ERROR", e);

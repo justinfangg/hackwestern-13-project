@@ -334,13 +334,7 @@ private struct RankRow: View {
     }
 
     private var avatar: some View {
-        let palette = [SideQuestDesign.cityCard, SideQuestDesign.travelCard, SideQuestDesign.timeCard]
-        let index = abs(entry.name.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }) % palette.count
-        return Text(entry.name.prefix(1).uppercased())
-            .font(SideQuestDesign.calSans(16, relativeTo: nil))
-            .foregroundStyle(.white)
-            .frame(width: 34, height: 34)
-            .background(Circle().fill(palette[index]))
+        PlayerAvatar(name: entry.name, size: 34)
     }
 }
 

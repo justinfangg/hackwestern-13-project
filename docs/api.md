@@ -1,8 +1,8 @@
 # Fog of War IRL: Backend API contract
 
-Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.3 (2026-11-22): adds §7 territory leaderboard**
+Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.4 (2026-11-22): adds §7 territory leaderboard, §8 social feed**
 
-Five Supabase Edge Functions in front of the Supabase Postgres database. The app talks only to these functions. It never reads or writes database tables or Supabase Storage directly (row-level security blocks it).
+Six Supabase Edge Functions (sync, quest-today, verify-quest, profile, leaderboard, feed) in front of the Supabase Postgres database. The app talks only to these functions. It never reads or writes database tables or Supabase Storage directly (row-level security blocks it).
 Mock responses live in [`docs/mocks/`](mocks/), one file per response. Build against the mocks until the functions are live.
 Design decisions are marked (D1)–(D12) and listed under [Decisions](#decisions). All were accepted as proposed on 2026-11-21.
 
@@ -255,6 +255,31 @@ Territory leaderboards per named area: Western's campus, parks, and neighbourhoo
 | `distance` | metres | sum of `segment_m` of the player's GPS pings inside the boundary |
 
 `entries` is the top 50, best first; ties share a rank. `me` is the caller's row even outside the top 50, or `null` with no score yet. Players with 0 aren't listed. Errors: `400 invalid_request` (bad `metric` or `lat`/`lng`), `404 area_not_found` ([mock](mocks/leaderboard.404.json)).
+
+---
+
+## 8. `GET feed` (social)
+
+The Social tab's activity feed: every player's finished sessions, newest first, one post per ended expedition ([mock](mocks/feed.200.json)). There's no friends list yet, so everyone's sessions appear. Sessions under 50 m aren't posted. Posts never include routes or positions.
+
+`GET feed?limit=<1–50, default 20>&before=<ISO timestamp>` (`before` = the previous page's `next_before`):
+```json
+{ "posts": [{ "id": "<expedition id>",
+              "author": { "id": "<user id>", "name": "mapmaker_ana", "is_me": false },
+              "started_at": "2026-11-22T14:02:11Z", "ended_at": "2026-11-22T14:44:30Z",
+              "duration_s": 2539, "distance_m": 3104.6, "new_tiles": 184,
+              "area": { "name": "Western University", "kind": "campus" },
+              "sticker": { "url": "https://…/stickers/<user>/<completion>.png", "category": "bench", "place_name": "University College Hill" } }],
+  "next_before": "2026-11-22T11:55:02.417Z" }
+```
+| Field | Notes |
+|---|---|
+| `author.name` | username, or `Explorer XXXX` without one (same as §7) |
+| `area` | the smallest territory (§7) that covers the session's first GPS fix; `null` outside every area or without pings |
+| `sticker` | the first quest the author completed between the session's start and 10 min after its end; else `null` |
+| `next_before` | keeps milliseconds; `null` on the last page |
+
+Errors: `400 invalid_request` (bad `limit` or `before`).
 
 ---
 

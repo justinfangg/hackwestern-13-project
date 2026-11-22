@@ -29,7 +29,7 @@ Only work pushed to `main` is counted.
 | Profile page: name, distance, city coverage, sticker board | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
 | Onboarding (username + permission screens) | Jonathan | ⬜ | |
 | Designed expedition recap card | Jonathan | ⬜ (the app still uses Justin's plain `RecapSheet` from `Dev/`) | |
-| **Territory leaderboard** (% / time / distance explored per campus, park, neighbourhood): areas from OSM, `leaderboard` function, `LeaderboardModel`, Leaderboard page opened from Profile | Justin | ✅ locally (smoke 31/31, 67 FogKit tests); ⬜ not yet deployed | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
+| **Territory leaderboard** (% / time / distance explored per campus, park, neighbourhood): areas from OSM, `leaderboard` function, `LeaderboardModel`, Leaderboard page opened from Profile | Justin | ✅ deployed (smoke 31/31, 67 FogKit tests) | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
 | Pitch | Vishaal | ⬜ | |
 
 **What works today:** open `FogOfWar/FogOfWar.xcodeproj` and run on the iPhone Simulator against the **live Supabase backend**. You get anonymous sign-in, today's real campus quest, Jonathan's map UI with Ayman's H3 fog clearing as you drive the joystick, expeditions with a recap, and tiles, GPS fixes and expeditions syncing to the cloud. Photo verification reaches the server but returns "verifier busy" until Gemini is fixed.

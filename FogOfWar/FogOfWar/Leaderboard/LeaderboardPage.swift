@@ -31,11 +31,8 @@ struct LeaderboardPage: View {
                     .padding(.top, 30)
                     .padding(.horizontal, Self.horizontalMargin)
 
-                areaPicker
-                    .padding(.top, 18)
-
                 metricCards
-                    .padding(.top, 18)
+                    .padding(.top, 22)
                     .padding(.horizontal, Self.horizontalMargin)
 
                 ranking
@@ -81,6 +78,9 @@ struct LeaderboardPage: View {
 
             Spacer(minLength: 12)
 
+            periodMenu
+                .padding(.top, 6)
+
             if showsCloseButton {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark")
@@ -96,38 +96,47 @@ struct LeaderboardPage: View {
     }
 
     private var subtitle: String {
-        guard let board = model.board else { return "Who's explored the most" }
+        guard let board = model.board, let city = board.area else { return "Who's explored the most" }
         let players = board.totalPlayers
-        return players == 1 ? "1 explorer here" : "\(players) explorers here"
+        return (players == 1 ? "1 explorer" : "\(players) explorers") + " in \(city.name)"
     }
 
-    // MARK: Areas
-
-    private var areaPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(model.areas) { area in
-                    AreaPill(area: area, isSelected: area.id == model.selectedAreaID) {
-                        Task { await model.select(area: area.id) }
-                    }
+    /// Day / week / month dropdown.
+    private var periodMenu: some View {
+        Menu {
+            Picker("Period", selection: Binding(
+                get: { model.period },
+                set: { period in Task { await model.select(period: period) } }
+            )) {
+                ForEach(LeaderboardPeriod.allCases) { period in
+                    Text(TerritoryFormat.label(for: period)).tag(period)
                 }
             }
-            .padding(.horizontal, Self.horizontalMargin)
+        } label: {
+            HStack(spacing: 6) {
+                Text(TerritoryFormat.label(for: model.period))
+                    .font(SideQuestDesign.ptSans(fixed: 16))
+                    .tracking(-0.3)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(SideQuestDesign.primaryText)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(Capsule().fill(.white))
+            .overlay(Capsule().stroke(SideQuestDesign.boardBorder, lineWidth: 1))
         }
-        .frame(height: 40)
-        .overlay {
-            if model.areas.isEmpty && model.isLoading { ProgressView() }
-        }
+        .accessibilityLabel("Period: \(TerritoryFormat.label(for: model.period))")
     }
 
-    // MARK: Metrics (your own numbers in the selected area)
+    // MARK: Metrics (your own numbers in this city and period)
 
     private var metricCards: some View {
         HStack(spacing: 12) {
             ForEach(LeaderboardMetric.allCases) { metric in
                 MetricCard(
                     metric: metric,
-                    value: model.selectedArea.map { TerritoryFormat.value($0.mine.value(for: metric), metric: metric) } ?? "–",
+                    value: model.board.map { TerritoryFormat.value($0.mine.value(for: metric), metric: metric) } ?? "–",
                     isSelected: metric == model.metric
                 ) {
                     Task { await model.select(metric: metric) }
@@ -140,9 +149,14 @@ struct LeaderboardPage: View {
 
     @ViewBuilder
     private var ranking: some View {
-        if let board = model.board, board.area.id == model.selectedAreaID {
-            if board.entries.isEmpty {
-                emptyState(areaName: board.area.name)
+        if let board = model.board {
+            if board.area == nil {
+                message(symbol: "map", title: "No leaderboard here yet",
+                        detail: "Leaderboards cover London for now.")
+            } else if board.entries.isEmpty {
+                message(symbol: "flag.checkered",
+                        title: "No one has explored \(board.area?.name ?? "here") \(TerritoryFormat.phrase(for: board.period)) yet",
+                        detail: "Head out to claim the top spot.")
             } else {
                 VStack(spacing: 0) {
                     ScrollView {
@@ -161,7 +175,7 @@ struct LeaderboardPage: View {
                             .background(SideQuestDesign.profileSurface.shadow(.drop(color: .black.opacity(0.08), radius: 8, y: -2)))
                     }
                 }
-                .refreshable { await model.refreshBoard() }
+                .refreshable { await model.refresh() }
             }
         } else if let error = model.lastError, !model.isLoading {
             VStack(spacing: 12) {
@@ -169,7 +183,7 @@ struct LeaderboardPage: View {
                     .font(SideQuestDesign.ptSans(17, relativeTo: .body))
                     .foregroundStyle(SideQuestDesign.boardLabelText)
                 Button("Try again") {
-                    Task { await model.load(near: services.location.currentCoordinate, metric: model.metric) }
+                    Task { await model.load(near: services.location.currentCoordinate ?? services.location.displayCoordinate) }
                 }
                 .font(SideQuestDesign.ptSans(17, relativeTo: .body))
                 .padding(.horizontal, 18).padding(.vertical, 8)
@@ -183,16 +197,16 @@ struct LeaderboardPage: View {
         }
     }
 
-    private func emptyState(areaName: String) -> some View {
+    private func message(symbol: String, title: String, detail: String) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: "flag.checkered")
+            Image(systemName: symbol)
                 .font(.system(size: 34, weight: .semibold))
                 .foregroundStyle(SideQuestDesign.cityCard)
-            Text("No one has explored \(areaName) yet")
+            Text(title)
                 .font(SideQuestDesign.calSans(20, relativeTo: .title3))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.black)
-            Text("Walk through it to claim the top spot.")
+            Text(detail)
                 .font(SideQuestDesign.ptSans(17, relativeTo: .body))
                 .foregroundStyle(SideQuestDesign.boardLabelText)
         }
@@ -202,37 +216,6 @@ struct LeaderboardPage: View {
 }
 
 // MARK: - Pieces
-
-private struct AreaPill: View {
-    let area: TerritoryArea
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: TerritoryFormat.symbol(for: area.kind))
-                    .font(.system(size: 13, weight: .semibold))
-                Text(area.name)
-                    .font(SideQuestDesign.ptSans(fixed: 15))
-                    .tracking(-0.3)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .foregroundStyle(isSelected ? SideQuestDesign.pillText : SideQuestDesign.primaryText)
-            .background {
-                Capsule().fill(isSelected ? SideQuestDesign.primaryText : .white)
-            }
-            .overlay {
-                Capsule().stroke(isSelected ? .clear : SideQuestDesign.boardBorder, lineWidth: 1)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(area.name), \(area.kind)")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
 
 /// Same shape as the profile's stat cards: label top-right, big value bottom-left.
 private struct MetricCard: View {
@@ -345,10 +328,31 @@ extension SideQuestDesign {
 enum TerritoryFormat {
     static func value(_ value: Double, metric: LeaderboardMetric) -> String {
         switch metric {
-        case .percent: ProfilePage.percentText(value)
+        case .percent: percent(value)
         case .distance: ProfilePage.distanceText(value)
         case .time: duration(value)
         }
+    }
+
+    /// A city is big, so a day's or week's share is tiny: keep two decimals below 1%.
+    static func percent(_ value: Double) -> String {
+        if value <= 0 { return "0%" }
+        if value >= 1 { return ProfilePage.percentText(value) }
+        if value < 0.01 { return "<0.01%" }
+        return value.formatted(.number.precision(.fractionLength(2))) + "%"
+    }
+
+    static func label(for period: LeaderboardPeriod) -> String {
+        switch period {
+        case .day: "Today"
+        case .week: "This week"
+        case .month: "This month"
+        }
+    }
+
+    /// "today", "this week", "this month" (inside a sentence).
+    static func phrase(for period: LeaderboardPeriod) -> String {
+        label(for: period).lowercased()
     }
 
     static func duration(_ seconds: Double) -> String {

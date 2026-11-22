@@ -32,7 +32,7 @@ Only work pushed to `main` is counted.
 | Profile page: name, distance, city coverage, sticker board. Now opened from the profile button on the map | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
 | Onboarding (username + permission screens) | Jonathan | ⬜ | |
 | Designed expedition recap card | Jonathan | ⬜ (the app still uses Justin's plain `RecapSheet` from `Dev/`) | |
-| **Territory leaderboard** (% / time / distance explored per campus, park, neighbourhood): areas from OSM, `leaderboard` function, `LeaderboardModel`, Leaderboard page (now the third tab; the Profile trophy button still opens it full screen) | Justin | ✅ deployed on the original project (smoke 31/31, 67 FogKit tests); ✅ live on `SideQuest` | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
+| **Leaderboard** (third tab): the city you're in (London), ranked by % explored / time / distance for **Today, This week or This month** (dropdown next to the title). Area pills removed. City boundary from OSM; per-area territory endpoints kept for older builds | Justin | ✅ live on `SideQuest` (local smoke 41/41, 76 FogKit tests) | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
 | Pitch | Vishaal | ⬜ | |
 
 **What works today:** open `FogOfWar/FogOfWar.xcodeproj` and run on the iPhone Simulator against the **live Supabase backend**. You get anonymous sign-in, today's real campus quest, Jonathan's map UI with Ayman's H3 fog clearing as you drive the joystick, expeditions with a recap, and tiles, GPS fixes and expeditions syncing to the cloud. Photo verification reaches the server but returns "verifier busy" until Gemini is fixed.
@@ -655,6 +655,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Backend project | The app can point at any Supabase project built from `supabase/migrations`; Jonathan's own `SideQuest` project (with his own Gemini key) is current as of 2026-11-22 | The shared key was throttled; the migrations and functions rebuild a working backend in a few commands. Anonymous sign-ins must be switched on in the dashboard or nothing loads |
 | Sign-in | Supabase anonymous sign-in + username; no Sign in with Apple | Nobody on the team has a paid Apple Developer account, which Sign in with Apple requires |
 | Quests per day | Several per Region per day (2 seeded), was one. Each has its own Accept button in the Quests sheet (2026-11-22) | Gives players a choice of where to walk; one bottom Accept button made it unclear which quest it started |
+| Leaderboard scope | One leaderboard per city (London) filtered by day / week / month, instead of picking a campus/park/neighbourhood (2026-11-22) | Simpler to read; time windows keep it competitive for new players |
 | Name | Keep "Fog of War IRL" for the hackathon | Says exactly what the app does in a 3-minute pitch |
 
 ## 16. Future Ideas (post-hackathon, not in scope)

@@ -1,0 +1,14 @@
+{
+  "metric": "distance",
+  "period": "week",
+  "period_start": "2026-11-17T05:00:00Z",
+  "area": { "id": "london", "name": "London", "kind": "city", "total_tiles": 188209 },
+  "total_players": 3,
+  "entries": [
+    { "rank": 1, "name": "mapmaker_ana", "value": 9120.4, "is_me": false },
+    { "rank": 2, "name": "vishaal", "value": 2410.7, "is_me": true },
+    { "rank": 3, "name": "Explorer 5D6C", "value": 830.2, "is_me": false }
+  ],
+  "me": { "rank": 2, "name": "vishaal", "value": 2410.7, "is_me": true },
+  "mine": { "percent": 0.042, "time_s": 1860, "distance_m": 2410.7 }
+}

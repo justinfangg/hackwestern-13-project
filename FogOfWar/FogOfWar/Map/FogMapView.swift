@@ -24,6 +24,9 @@ struct FogMapView: UIViewRepresentable {
     /// Keeps MapKit's legal label clear of chrome drawn over the map.
     var mapChromeInsets: UIEdgeInsets = .zero
     var recenterToken: Int
+    /// Zooms to a spot (e.g. a quest's target) and stops following the player.
+    /// Applied once per new `MapFocus.id`.
+    var focus: MapFocus?
     var onMapTap: (CLLocationCoordinate2D) -> Void
     var onFollowingChanged: (Bool) -> Void
     var onQuestSelected: (String) -> Void = { _ in }
@@ -55,6 +58,7 @@ struct FogMapView: UIViewRepresentable {
         private var lastRenderedChangeID: UUID?
         private var lastUserCoordinate: CLLocationCoordinate2D?
         private var lastRecenterToken: Int
+        private var lastFocusID: UUID?
         private var isFollowingUser = true
         private var questAnnotations: [String: QuestAnnotation] = [:]
         private var playerAnnotation: UserLocationAnnotation?
@@ -69,6 +73,7 @@ struct FogMapView: UIViewRepresentable {
         init(parent: FogMapView) {
             self.parent = parent
             self.lastRecenterToken = parent.recenterToken
+            self.lastFocusID = parent.focus?.id
             super.init()
         }
 
@@ -137,7 +142,15 @@ struct FogMapView: UIViewRepresentable {
                 mapView.layoutMargins = newParent.mapChromeInsets
             }
 
-            if newParent.recenterToken != lastRecenterToken {
+            if let focus = newParent.focus, focus.id != lastFocusID {
+                lastFocusID = focus.id
+                lastRecenterToken = newParent.recenterToken
+                setFollowing(false)
+                let center = MKMapPoint(focus.coordinate)
+                let side = focus.spanMeters * MKMapPointsPerMeterAtLatitude(focus.coordinate.latitude)
+                let rect = MKMapRect(x: center.x - side / 2, y: center.y - side / 2, width: side, height: side)
+                mapView.setVisibleMapRect(rect, edgePadding: focus.padding, animated: true)
+            } else if newParent.recenterToken != lastRecenterToken {
                 lastRecenterToken = newParent.recenterToken
                 setFollowing(true)
                 mapView.setCenter(newParent.userCoordinate ?? Self.westernUniversity, animated: true)
@@ -466,4 +479,17 @@ final class FogMapContainerView: UIView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+}
+
+/// A one-off "show this place" request for `FogMapView`. Make a new value (new
+/// `id`) each time; the map zooms when it sees an id it hasn't applied yet.
+struct MapFocus: Equatable {
+    let id = UUID()
+    var coordinate: CLLocationCoordinate2D
+    /// Width of ground to show around the spot.
+    var spanMeters: Double = 260
+    /// Keeps the spot clear of chrome (e.g. the expanded Quests sheet).
+    var padding: UIEdgeInsets = .zero
+
+    static func == (lhs: MapFocus, rhs: MapFocus) -> Bool { lhs.id == rhs.id }
 }

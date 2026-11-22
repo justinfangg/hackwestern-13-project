@@ -58,7 +58,8 @@ async function getProfile(req: Request, userId: string): Promise<Response> {
         (now() at time zone ${TZ})::date - 1, interval '1 day') d
     )
     select days.day::text as date,
-           (select q.category from daily_quests q, home where q.region_h3 = home.region_h3 and q.quest_date = days.day) as category
+           (select q.category from daily_quests q, home where q.region_h3 = home.region_h3 and q.quest_date = days.day
+              order by q.slot limit 1) as category
     from days
     where not exists (select 1 from quest_completions c join daily_quests q on q.id = c.quest_id
                       where c.user_id = ${userId} and q.quest_date = days.day)

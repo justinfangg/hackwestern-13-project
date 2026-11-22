@@ -162,7 +162,7 @@ from (select expedition_id, extensions.st_makeline(location::extensions.geometry
       group by expedition_id having count(*) >= 2) r
 where e.id = r.expedition_id and e.user_id = ${s(USER)} and e.path is null;
 
-${completions.map((c) => `with q as (select id from public.daily_quests where region_h3 = ${BigInt("0x" + REGION)} and quest_date = '${c.date}'),
+${completions.map((c) => `with q as (select id from public.daily_quests where region_h3 = ${BigInt("0x" + REGION)} and quest_date = '${c.date}' and slot = 0),
 ins as (
   insert into public.quest_completions (id, quest_id, user_id, sticker_url, confidence, completed_at)
   select ${s(c.id)}, q.id, ${s(USER)}, ${s(stickerUrl(c))}, 0.93, ${s(c.at)} from q

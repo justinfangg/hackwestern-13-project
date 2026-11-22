@@ -114,6 +114,19 @@ public enum QuestStatus: Hashable, Codable, Sendable {
     }
 }
 
+/// One of today's quests plus the player's progress on it (Quests sheet row).
+public struct QuestOption: Hashable, Sendable, Identifiable {
+    public var quest: Quest
+    public var completedByMe: Bool
+    public var attemptsLeft: Int
+    public var id: UUID { quest.id }
+    public init(quest: Quest, completedByMe: Bool, attemptsLeft: Int) {
+        self.quest = quest
+        self.completedByMe = completedByMe
+        self.attemptsLeft = attemptsLeft
+    }
+}
+
 public struct QuestDTO: Hashable, Codable, Sendable {
     public var id: UUID
     public var category: String
@@ -142,9 +155,25 @@ public struct QuestTodayResponse: Codable, Sendable {
     public var foundToday: Int
     public var completedByMe: Bool
     public var attemptsLeft: Int
+    /// Every quest in the region today, first = `quest`. nil from servers before multiple quests.
+    public var quests: [Entry]?
+
+    /// One of today's quests with the caller's progress on it.
+    public struct Entry: Codable, Sendable {
+        public var quest: QuestDTO
+        public var foundToday: Int
+        public var completedByMe: Bool
+        public var attemptsLeft: Int
+        public init(quest: QuestDTO, foundToday: Int, completedByMe: Bool, attemptsLeft: Int) {
+            self.quest = quest
+            self.foundToday = foundToday
+            self.completedByMe = completedByMe
+            self.attemptsLeft = attemptsLeft
+        }
+    }
 
     public init(date: String, regionH3: String, status: QuestStatus, availableAt: Date? = nil, resetsAt: Date,
-                quest: QuestDTO?, foundToday: Int, completedByMe: Bool, attemptsLeft: Int) {
+                quest: QuestDTO?, foundToday: Int, completedByMe: Bool, attemptsLeft: Int, quests: [Entry]? = nil) {
         self.date = date
         self.regionH3 = regionH3
         self.status = status
@@ -154,6 +183,22 @@ public struct QuestTodayResponse: Codable, Sendable {
         self.foundToday = foundToday
         self.completedByMe = completedByMe
         self.attemptsLeft = attemptsLeft
+        self.quests = quests
+    }
+
+    /// All of today's quests, app-side (empty when there's none). Falls back to the single `quest`.
+    public var appQuests: [QuestOption] {
+        guard status == .active else { return [] }
+        let entries = quests ?? quest.map {
+            [Entry(quest: $0, foundToday: foundToday, completedByMe: completedByMe, attemptsLeft: attemptsLeft)]
+        } ?? []
+        return entries.map { e in
+            let q = e.quest
+            return QuestOption(
+                quest: Quest(id: q.id, date: date, category: q.category, hint: q.hint, placeName: q.placeName,
+                             target: q.target, geofenceRadiusM: q.geofenceRadiusM, foundTodayCount: e.foundToday),
+                completedByMe: e.completedByMe, attemptsLeft: e.attemptsLeft)
+        }
     }
 
     /// The app-side quest, or nil when there's no quest today.

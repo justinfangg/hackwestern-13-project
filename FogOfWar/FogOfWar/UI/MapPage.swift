@@ -118,7 +118,11 @@ struct MapPage: View {
             recenterToken: recenterToken,
             onMapTap: { _ in },
             onFollowingChanged: { isFollowingUser = $0 },
-            onQuestSelected: { _ in isQuestSheetExpanded = true }
+            onQuestSelected: { id in
+                // Tapping a beacon picks that quest (outlined in the sheet) unless one is under way.
+                if !isOnQuest, let uuid = UUID(uuidString: id) { services.selectQuest(uuid) }
+                isQuestSheetExpanded = true
+            }
         )
     }
 
@@ -163,20 +167,24 @@ struct MapPage: View {
     }
 
     private var questMarkers: [QuestMarkerData] {
-        guard let quest = services.quests.today else { return [] }
-        return [
-            QuestMarkerData(
+        let selectedID = services.quests.selectedID
+        // On a quest only its beacon shows; otherwise every quest in the area.
+        let shown = services.quests.options.filter { !isOnQuest || isExploring || $0.id == selectedID }
+        return shown.map { option in
+            let quest = option.quest
+            return QuestMarkerData(
                 id: quest.id.uuidString,
                 coordinate: quest.target.clCoordinate,
                 title: quest.category.capitalized,
                 subtitle: quest.title,
                 participantCount: services.debug.participantCount(real: quest.foundTodayCount),
-                status: questStatus,
+                status: option.id == selectedID ? questStatus : (option.completedByMe ? .completed : .active),
                 // The accepted-quest frame shows only the beacon.
                 showsLabel: !isOnQuest || isExploring
             )
-        ]
+        }
     }
+
 
     private var activeRouteSegments: [[CLLocationCoordinate2D]] {
         guard let segments = services.expeditions.active?.segments else { return [] }
@@ -286,8 +294,8 @@ struct MapPage: View {
                     onExplore: startExploring
                 ) {
                     QuestSheetContent(
-                        onAccept: acceptQuest,
-                        onTakePhoto: takePhoto,
+                        onAccept: { services.selectQuest($0); acceptQuest() },
+                        onTakePhoto: { services.selectQuest($0); takePhoto() },
                         onShowDebug: { showDebug = true }
                     )
                 }
@@ -388,125 +396,193 @@ struct MapPage: View {
     }
 }
 
-/// Expanded body of the Quests sheet: today's quest, capture status and the
-/// button that accepts it.
+/// Expanded body of the Quests sheet: every quest in the area today, each
+/// with its own Accept button, so it's clear which one you're starting.
 private struct QuestSheetContent: View {
-    let onAccept: () -> Void
-    let onTakePhoto: () -> Void
+    let onAccept: (UUID) -> Void
+    let onTakePhoto: (UUID) -> Void
     let onShowDebug: () -> Void
 
     @Environment(FogServices.self) private var services
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 0) {
             Divider()
-            questCard
-            Spacer(minLength: 0)
-            expeditionRow
-        }
-        .padding(.horizontal, 22)
-        .padding(.bottom, 18)
-    }
+            HStack {
+                Text(heading)
+                    .font(SideQuestDesign.ptSans(15, relativeTo: .subheadline))
+                    .foregroundStyle(SideQuestDesign.boardLabelText)
+                Spacer()
+                #if DEBUG
+                Button("Debug", systemImage: "ladybug", action: onShowDebug)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.small)
+                #endif
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 10)
 
-    @ViewBuilder
-    private var questCard: some View {
-        if let quest = services.quests.today {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(quest.title)
-                        .font(SideQuestDesign.ptSans(24, relativeTo: .title2))
-                        .foregroundStyle(SideQuestDesign.primaryText)
-                    Spacer()
-                    let participants = services.debug.participantCount(real: quest.foundTodayCount)
-                    Label {
-                        Text(participants, format: .number)
-                    } icon: {
-                        Image("QuestParticipants")
-                            .renderingMode(.template)
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .foregroundStyle(.white)
-                    .background(statusColor, in: .capsule)
-                    .accessibilityLabel("\(participants) explorers")
-                }
-                Text(quest.hint)
+            if services.quests.options.isEmpty {
+                Text(services.quests.isLoading ? "Loading today's quests…" : "No quests nearby today")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Text(statusText)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    captureAction
+                    .padding(.horizontal, 22)
+                    .padding(.top, 8)
+            } else {
+                ScrollView {
+                    VStack(spacing: 10) {
+                        ForEach(services.quests.options) { option in
+                            QuestOptionRow(
+                                option: option,
+                                isSelected: option.id == services.quests.selectedID,
+                                onAccept: { onAccept(option.id) },
+                                onTakePhoto: { onTakePhoto(option.id) }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
                 }
+                .scrollIndicators(.hidden)
             }
-        } else {
-            Text(services.quests.isLoading ? "Loading today's quest…" : "No quest nearby today")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
         }
     }
 
+    private var heading: String {
+        let count = services.quests.options.count
+        return count == 1 ? "Today's quest" : "Today's quests · \(count)"
+    }
+}
+
+/// One quest in the sheet: what to find, where, how far, and its own action.
+private struct QuestOptionRow: View {
+    let option: QuestOption
+    /// The quest the capture flow is tracking (marker tapped, or accepted before).
+    let isSelected: Bool
+    let onAccept: () -> Void
+    let onTakePhoto: () -> Void
+
+    @Environment(FogServices.self) private var services
+
+    private var quest: Quest { option.quest }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: QuestCategory.symbolName(quest.category))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(option.completedByMe ? SideQuestDesign.questCompleted : SideQuestDesign.questActive))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(quest.title)
+                        .font(SideQuestDesign.ptSans(20, relativeTo: .title3))
+                        .tracking(-0.6)
+                        .foregroundStyle(SideQuestDesign.primaryText)
+                        .lineLimit(1)
+                    if let place = quest.placeName {
+                        Text(place)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                Label {
+                    Text(participants, format: .number)
+                } icon: {
+                    Image("QuestParticipants").renderingMode(.template)
+                }
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .foregroundStyle(.white)
+                .background(option.completedByMe ? SideQuestDesign.questCompleted : SideQuestDesign.questActive, in: .capsule)
+                .accessibilityLabel("\(participants) explorers")
+            }
+
+            Text(quest.hint)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                Text(statusText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                action
+            }
+        }
+        .padding(14)
+        .background(.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(isSelected && showsSelection ? SideQuestDesign.questActive : SideQuestDesign.boardBorder,
+                        lineWidth: isSelected && showsSelection ? 2 : 1)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var participants: Int { services.debug.participantCount(real: quest.foundTodayCount) }
+
+    /// Only worth outlining the picked quest when there's more than one.
+    private var showsSelection: Bool { services.quests.options.count > 1 }
+
+    private var isReadyHere: Bool {
+        guard isSelected, case .ready = services.questCapture.state else { return false }
+        return true
+    }
+
     @ViewBuilder
-    private var captureAction: some View {
-        let capture = services.questCapture
-        switch capture.state {
-        case .ready:
+    private var action: some View {
+        if option.completedByMe {
+            Label("Found", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(SideQuestDesign.questCompleted)
+        } else if option.attemptsLeft <= 0 {
+            EmptyView()
+        } else if isReadyHere {
             Button("Take photo", systemImage: "camera.fill", action: onTakePhoto)
                 .buttonStyle(.borderedProminent)
                 .tint(SideQuestDesign.questActive)
-        case .rejected, .error, .tooFar:
-            Button("Retry") { capture.retry() }
-                .buttonStyle(.bordered)
-        default:
-            EmptyView()
-        }
-    }
-
-    /// The sheet is only on screen before a quest is accepted; once accepted
-    /// the active-quest card takes over (see `MapPage.bottomChrome`).
-    private var expeditionRow: some View {
-        HStack {
-            Button("Accept quest", systemImage: "figure.walk", action: onAccept)
+                .controlSize(.small)
+                .accessibilityLabel("Take photo for \(quest.title)")
+        } else {
+            Button("Accept", systemImage: "figure.walk", action: onAccept)
                 .buttonStyle(.borderedProminent)
                 .tint(SideQuestDesign.questCompleted)
-                .disabled(services.quests.today == nil)
-            Spacer()
-            #if DEBUG
-            Button("Debug", systemImage: "ladybug", action: onShowDebug)
-                .labelStyle(.iconOnly)
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
-            #endif
+                .controlSize(.small)
+                .accessibilityLabel("Accept \(quest.title)")
         }
-        .controlSize(.small)
-    }
-
-    private var statusColor: Color {
-        if case .success = services.questCapture.state { return SideQuestDesign.questCompleted }
-        return SideQuestDesign.questActive
     }
 
     private var statusText: String {
-        let capture = services.questCapture
-        switch capture.state {
-        case .noQuest: return "No quest loaded"
-        case .locked:
-            if let distance = capture.distanceToTarget {
-                return "\(Int(distance)) m away · get within 40 m"
+        if option.completedByMe { return "Found today" }
+        if option.attemptsLeft <= 0 { return "Out of attempts today" }
+        if isSelected {
+            switch services.questCapture.state {
+            case .ready: return "You're here, snap it!"
+            case .verifying: return "Verifying…"
+            case .rejected(let reason, let left): return "Not verified: \(reason) (\(left) left)"
+            case .tooFar(let distance): return "Photo was \(Int(distance)) m away, get closer"
+            case .error(let message): return message
+            default: break
             }
-            return "Get within 40 m to unlock"
-        case .ready: return "You're here, snap it!"
-        case .verifying: return "Verifying…"
-        case .success(let sticker): return "Collected \(sticker.category) sticker"
-        case .rejected(let reason, let left): return "Not verified: \(reason) (\(left) left)"
-        case .tooFar(let distance): return "Photo was \(Int(distance)) m away, get closer"
-        case .alreadyCompleted: return "Already found today"
-        case .outOfAttempts: return "Out of attempts today"
-        case .error(let message): return message
         }
+        guard let here = services.location.currentCoordinate ?? services.location.displayCoordinate else {
+            return "Get within \(Int(quest.geofenceRadiusM)) m to unlock"
+        }
+        let distance = Measurement(value: Geo.distance(here, quest.target), unit: UnitLength.meters)
+            .formatted(.measurement(width: .abbreviated, usage: .road))
+        return "\(distance) away"
     }
 }

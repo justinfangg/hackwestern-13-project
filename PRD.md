@@ -20,7 +20,7 @@ Only work pushed to `main` is counted.
 | API contract v0.2 + mocks, decisions D1–D12 settled | Vishaal → Justin | ✅ | `docs/api.md`, `docs/mocks/` |
 | Supabase project: schema with row-level security, `stickers` + `quest-photos` buckets, anonymous sign-in, `GEMINI_API_KEY` secret. Originally `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1); **the app now points at a rebuilt project, `SideQuest` (ref `qsxakuynoyxsyxhkxvuo`)** with Jonathan's own Gemini key (see "Changed since the original plan") | Justin → Jonathan | ✅ (territory migration, `leaderboard` and `feed` deployed 2026-11-22) | `supabase/` |
 | Edge Functions `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST), deployed. Smoke test 24/24 | Justin | ✅ | `supabase/functions/`, `scripts/functions/smoke.mjs` |
-| Daily quests from real OpenStreetMap objects on campus (Nov 7–27 seeded) | Justin | ✅ | `scripts/db/seed-quests.mjs` |
+| Daily quests from real OpenStreetMap objects on campus: **two per area per day** (different categories), seeded Nov 21–27 on `SideQuest`. The Quests sheet lists both, each with its own Accept button | Justin | ✅ | `scripts/db/seed-quests.mjs --slots 2`, `UI/MapPage.swift` |
 | Demo-account seed (expeditions on real footpaths, stickers, 4-day streak, missed days) | Justin | ✅ script ready; ⬜ not yet run for the demo phone | `scripts/db/seed-demo.mjs` |
 | App connected to the live backend | Justin | ✅ | `FogOfWar/FogOfWar/Config/SupabaseConfig.swift` |
 | Photo verification with Gemini | Justin | 🟡 code done; **blocked**: the key is throttled (timeouts, 503s, empty 404s) | `supabase/functions/_shared/gemini.ts` |
@@ -201,7 +201,7 @@ Priority: **P0** = must ship · **P1** = polish, done once all P0s work end to e
 
 | ID | Requirement | Priority |
 |---|---|---|
-| Q-1 | One quest per Region per day, the same for every user in that Region | P0 |
+| Q-1 | A few quests per Region per day (currently 2, different categories), the same for every user in that Region. The Quests sheet lists them, each with its own Accept button; tapping a beacon on the map outlines that quest in the sheet. Attempts and completion are per quest | P0 |
 | Q-2 | A quest = object category (bench, lamppost, tree, fire hydrant, mural, statue, mailbox, etc.) + target coordinates + hint text | P0 |
 | Q-3 | Quest targets come from real mapped objects (OpenStreetMap features, see §10.4) so the object actually exists at that spot | P0 |
 | Q-4 | Quest marker is shown on the map. The marker is never hidden by fog; fog acts as a lure toward it | P0 |
@@ -654,6 +654,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Navigation | Bottom tab bar with Social, Map and Leaderboard pages that slide horizontally; Profile opens as a sheet from the map's avatar button (2026-11-22, replaces the map/profile drag split) | Matches the new Figma design (55:3722); gives Social and Leaderboard their own place and removes the split-drag gesture, which fought with map panning |
 | Backend project | The app can point at any Supabase project built from `supabase/migrations`; Jonathan's own `SideQuest` project (with his own Gemini key) is current as of 2026-11-22 | The shared key was throttled; the migrations and functions rebuild a working backend in a few commands. Anonymous sign-ins must be switched on in the dashboard or nothing loads |
 | Sign-in | Supabase anonymous sign-in + username; no Sign in with Apple | Nobody on the team has a paid Apple Developer account, which Sign in with Apple requires |
+| Quests per day | Several per Region per day (2 seeded), was one. Each has its own Accept button in the Quests sheet (2026-11-22) | Gives players a choice of where to walk; one bottom Accept button made it unclear which quest it started |
 | Name | Keep "Fog of War IRL" for the hackathon | Says exactly what the app does in a 3-minute pitch |
 
 ## 16. Future Ideas (post-hackathon, not in scope)

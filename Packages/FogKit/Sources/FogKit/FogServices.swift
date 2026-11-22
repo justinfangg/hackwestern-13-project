@@ -112,6 +112,12 @@ public final class FogServices {
         questCapture.setQuest(quests.today, completedByMe: quests.completedByMe, attemptsLeft: quests.attemptsLeft)
     }
 
+    /// Makes one of today's quests the active one (Quests sheet row, or its map marker).
+    public func selectQuest(_ id: UUID) {
+        quests.select(id)
+        questCapture.setQuest(quests.today, completedByMe: quests.completedByMe, attemptsLeft: quests.attemptsLeft)
+    }
+
     /// Demo "Reset fog" (PRD D-6).
     public func resetFog() {
         pipeline.explorer.resetAll()

@@ -12,6 +12,9 @@ struct ProfilePage: View {
     @Environment(ExplorationStore.self) private var explorationStore
     @State private var coverage = CityCoverage()
     @State private var percentExplored: Double?
+    @State private var selectedSticker: BoardSticker?
+    /// Opens the territory leaderboard on this metric (trophy button or a stat card).
+    @State private var territoryMetric: LeaderboardMetric?
 
     // Figma offsets from the top of the profile container.
     private static let horizontalMargin: CGFloat = 28
@@ -21,19 +24,15 @@ struct ProfilePage: View {
     private static let bottomMargin: CGFloat = 30
     private static let minimumBoardHeight: CGFloat = 280
 
+    init(contentHeight: CGFloat) {
+        self.contentHeight = contentHeight
+        #if DEBUG
+        _selectedSticker = State(initialValue: HolographicStickerDebugFixture.current?.boardSticker)
+        #endif
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-                .padding(.top, Self.headerTop)
-                .frame(height: Self.statsTop, alignment: .top)
-
-            stats
-                .frame(height: Self.boardTop - Self.statsTop, alignment: .top)
-
-            StickerBoard(label: Date.now.formatted(.dateTime.month(.abbreviated).year()))
-                .frame(height: boardHeight)
-        }
-        .padding(.horizontal, Self.horizontalMargin)
+        profileContent
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
             RoundedRectangle(cornerRadius: SideQuestDesign.containerCornerRadius, style: .continuous)
@@ -47,10 +46,89 @@ struct ProfilePage: View {
             percentExplored = await coverage.percentExplored(by: explorationStore.clearedCells)
         }
         .task { await services.profile.refresh() }
+        .fullScreenCover(item: $selectedSticker) { selectedSticker in
+            let detail = detailData(for: selectedSticker)
+            HolographicStickerDetailView(
+                sticker: selectedSticker,
+                collectedSticker: detail.collectedSticker,
+                expedition: detail.expedition,
+                isSample: detail.isSample,
+                onDismiss: { self.selectedSticker = nil }
+            )
+            .preferredColorScheme(.light)
+        }
+        .fullScreenCover(item: $territoryMetric) { metric in
+            LeaderboardPage(initialMetric: metric)
+                .environment(services)
+        }
+    }
+
+    private var profileContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+                .padding(.top, Self.headerTop)
+                .frame(height: Self.statsTop, alignment: .top)
+
+            stats
+                .frame(height: Self.boardTop - Self.statsTop, alignment: .top)
+
+            StickerBoard(
+                label: Date.now.formatted(.dateTime.month(.abbreviated).year()),
+                onSelect: { selectedSticker = $0 }
+            )
+                .frame(height: boardHeight)
+        }
+        .padding(.horizontal, Self.horizontalMargin)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var boardHeight: CGFloat {
         max(contentHeight - Self.boardTop - Self.bottomMargin, Self.minimumBoardHeight)
+    }
+
+    private func detailData(for boardSticker: BoardSticker) -> (
+        collectedSticker: Sticker?,
+        expedition: ExpeditionSummary?,
+        isSample: Bool
+    ) {
+        #if DEBUG
+        if let fixture = HolographicStickerDebugFixture.current {
+            return (fixture.collectedSticker, fixture.expedition, true)
+        }
+        #endif
+
+        let collectedSticker = matchingSticker(for: boardSticker)
+        return (
+            collectedSticker,
+            collectedSticker.flatMap { matchingExpedition(for: $0) },
+            false
+        )
+    }
+
+    /// Board demo stickers intentionally have non-UUID ids, so they cannot be
+    /// associated with route data by accident. Once a board item carries a
+    /// real completion or quest UUID, prefer an exact persisted relationship;
+    /// timestamp containment is accepted only when it identifies one summary.
+    private func matchingSticker(for boardSticker: BoardSticker) -> Sticker? {
+        guard let identifier = UUID(uuidString: boardSticker.id) else { return nil }
+        return services.profile.stickers.first(where: {
+            $0.id == identifier || $0.questID == identifier
+        })
+    }
+
+    private func matchingExpedition(for collectedSticker: Sticker) -> ExpeditionSummary? {
+        let expeditions = services.profile.expeditions
+        if let exact = expeditions.first(where: { $0.sticker?.id == collectedSticker.id }) {
+            return exact
+        }
+        if let exactQuest = expeditions.first(where: { $0.sticker?.questID == collectedSticker.questID }) {
+            return exactQuest
+        }
+
+        let containing = expeditions.filter {
+            $0.startedAt <= collectedSticker.collectedAt && collectedSticker.collectedAt <= $0.endedAt
+        }
+        return containing.count == 1 ? containing[0] : nil
     }
 
     // MARK: Header
@@ -75,6 +153,16 @@ struct ProfilePage: View {
 
             Spacer(minLength: 12)
 
+            Button { territoryMetric = .percent } label: {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(SideQuestDesign.questActive)
+                    .frame(width: 50, height: 50)
+                    .background(Circle().fill(SideQuestDesign.primaryText))
+            }
+            .padding(.trailing, 8)
+            .accessibilityLabel("Territory leaderboard")
+
             Image("ProfileAvatar")
                 .resizable()
                 .frame(width: 50, height: 50)
@@ -86,6 +174,7 @@ struct ProfilePage: View {
 
     private var stats: some View {
         HStack(spacing: 18) {
+            Button { territoryMetric = .percent } label: {
             ProfileStatCard(
                 value: Self.percentText(displayedPercent),
                 label: cityName ?? "Your city",
@@ -98,7 +187,11 @@ struct ProfilePage: View {
                     .frame(width: 102, height: 102)
                     .offset(x: -41, y: -6)
             }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the territory leaderboard")
 
+            Button { territoryMetric = .distance } label: {
             ProfileStatCard(
                 value: Self.distanceText(totalDistanceMeters),
                 label: "Traveled",
@@ -111,6 +204,9 @@ struct ProfilePage: View {
                     .frame(width: 69.3332, height: 80.008)
                     .offset(x: -8.67, y: -1.67)
             }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the territory leaderboard")
         }
     }
 

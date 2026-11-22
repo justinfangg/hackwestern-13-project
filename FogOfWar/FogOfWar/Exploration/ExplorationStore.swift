@@ -189,6 +189,17 @@ public final class ExplorationStore: ExplorationClearing {
         resetExploration()
     }
 
+    // MARK: Restore from server (FogKit, docs/api.md D8). Added by Justin.
+
+    public var clearedTileCount: Int { clearedCells.count }
+
+    /// Tiles from `GET profile?include=tiles` after a reinstall. Published as an `.external` change
+    /// with no origin, so the map redraws without the reveal animation.
+    @discardableResult
+    public func restore(tiles: [TileID]) -> Int {
+        clear(cells: tiles.map(H3CellID.init), source: .external).count
+    }
+
     public func resetExploration() {
         do {
             let records = try modelContext.fetch(FetchDescriptor<ExploredCellRecord>())

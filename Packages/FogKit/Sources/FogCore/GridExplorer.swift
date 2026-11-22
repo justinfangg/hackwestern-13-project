@@ -29,6 +29,13 @@ public final class GridExplorer: ExplorationClearing {
 
     public func resetAll() { cleared.removeAll() }
 
+    public var clearedTileCount: Int { cleared.count }
+
+    @discardableResult
+    public func restore(tiles: [TileID]) -> Int {
+        tiles.reduce(0) { $0 + (cleared.insert($1).inserted ? 1 : 0) }
+    }
+
     // MARK: Grid math
 
     private var dLat: Double { cellSize / Geo.earthRadius * 180 / .pi }

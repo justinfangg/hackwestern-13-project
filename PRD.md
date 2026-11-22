@@ -1,57 +1,75 @@
 # PRD: Fog of War IRL
 
 > Working title. Hack Western 13 project. Native iOS app (SwiftUI).
-> Status: Draft v0.2 (2026-11-21). Scope locked to core features. Progress last updated 2026-11-21 (see §0).
+> Status: Draft v0.2 (2026-11-21). Scope locked to core features. Progress last updated 2026-11-21 evening (see §0).
 
 ---
 
 ## 0. Progress
 
-Legend: ✅ done · 🟡 started / done but needs work · ⬜ not started.
-Only work that's been pushed to GitHub is counted.
+Last updated 2026-11-21 (evening). Legend: ✅ done · 🟡 started / needs work · ⬜ not started.
+Only work pushed to `main` is counted.
 
 ### Overall
 
 | Area | Owner | Status | Where |
 |---|---|---|---|
-| PRD, team split, tech stack | All | ✅ | `main` |
-| Xcode app project (iOS 17+, iPhone portrait, permissions, background location) | Justin | ✅ | `main`: `FogOfWar/` |
-| FogKit package: location, simulator, expeditions, quest capture, networking (§13 Justin checklist) | Justin | ✅ mostly; API alignment pending | `main`: `Packages/FogKit/` |
-| Temporary dev test screen (map, joystick, quest, expedition, recap/share) | Justin | ✅ | `main`: `FogOfWar/FogOfWar/Dev/` |
-| API contract + mock responses | Vishaal | ✅ (open decisions still to settle) | `main`: `docs/api.md`, `docs/mocks/` |
-| Database schema + schema tests (17/17 pass on Supabase Postgres) | Vishaal, moved to Supabase by Justin | ✅ pushed to the cloud project | `main`: `supabase/migrations/`, `scripts/db/`, `docs/backend.md` |
-| Supabase project `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1): anonymous sign-in, schema, `stickers` + `quest-photos` buckets, `GEMINI_API_KEY` secret | Justin | ✅ | `supabase/config.toml` |
-| Edge Functions (deployed), quest seeding | Justin | ✅ (Gemini unreliable) | `main`: `supabase/functions/`, `scripts/db/seed-quests.mjs` |
-| Prompt tuning, demo-account seeding | Justin | ⬜ | |
+| PRD, team split, tech stack | All | ✅ | `PRD.md` |
+| Xcode app project (iOS 17+, iPhone portrait, permissions, background location) | Justin | ✅ | `FogOfWar/` |
+| FogKit: location pipeline, Simulator Mode, expeditions, quest capture, camera, sticker cutout, networking, sync, anonymous sign-in, fog restore. 64 tests | Justin | ✅ (not yet tested on a real iPhone) | `Packages/FogKit/` |
+| API contract v0.2 + mocks, decisions D1–D12 settled | Vishaal → Justin | ✅ | `docs/api.md`, `docs/mocks/` |
+| Supabase project `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1): schema with row-level security, `stickers` + `quest-photos` buckets, anonymous sign-in, `GEMINI_API_KEY` secret | Justin | ✅ | `supabase/` |
+| Edge Functions `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST), deployed. Smoke test 24/24 | Justin | ✅ | `supabase/functions/`, `scripts/functions/smoke.mjs` |
+| Daily quests from real OpenStreetMap objects on campus (Nov 7–27 seeded) | Justin | ✅ | `scripts/db/seed-quests.mjs` |
+| Demo-account seed (expeditions on real footpaths, stickers, 4-day streak, missed days) | Justin | ✅ script ready; ⬜ not yet run for the demo phone | `scripts/db/seed-demo.mjs` |
+| App connected to the live backend | Justin | ✅ | `FogOfWar/FogOfWar/Config/SupabaseConfig.swift` |
+| Photo verification with Gemini | Justin | 🟡 code done; **blocked**: the key is throttled (timeouts, 503s, empty 404s) | `supabase/functions/_shared/gemini.ts` |
+| H3 fog map: `ExplorationStore` (SwiftData), `TileMath`, `FogRenderer`, quest marker, `PathTraceMapView` | Ayman | ✅ (performance with thousands of tiles untested on a phone) | `FogOfWar/FogOfWar/Exploration/`, `Map/` |
+| Map page, home layout, cloud fog visuals, active-quest card, quest sheet, quest camera screen | Jonathan | ✅ | `FogOfWar/FogOfWar/UI/` |
+| Profile page: name, distance, city coverage, sticker board | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
+| Onboarding (username + permission screens) | Jonathan | ⬜ | |
+| Designed expedition recap card | Jonathan | ⬜ (the app still uses Justin's plain `RecapSheet` from `Dev/`) | |
+| **Territory leaderboard** (% / time / distance explored per campus, park, neighbourhood): areas from OSM, `leaderboard` function, `LeaderboardModel`, Leaderboard page opened from Profile | Justin | ✅ deployed (smoke 31/31, 67 FogKit tests) | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
 | Pitch | Vishaal | ⬜ | |
-| Fog renderer + H3 `ExplorationStore` | Ayman | ⬜ (branch `feature/ayman-map-fog` exists, no commits yet) | |
-| Design system, screens, `AuthService` | Jonathan | ⬜ nothing pushed yet | |
 
-**What works today:** run `FogOfWar/FogOfWar.xcodeproj` on the iPhone Simulator against the **live Supabase backend**: anonymous sign-in, today's real campus quest from OpenStreetMap, Ayman's H3 fog clearing with the joystick, expeditions, and sync of tiles/pings/expeditions to the cloud. Photo verification reaches the server but Gemini is currently unreliable (`verifier_unavailable`).
+**What works today:** open `FogOfWar/FogOfWar.xcodeproj` and run on the iPhone Simulator against the **live Supabase backend**. You get anonymous sign-in, today's real campus quest, Jonathan's map UI with Ayman's H3 fog clearing as you drive the joystick, expeditions with a recap, and tiles, GPS fixes and expeditions syncing to the cloud. Photo verification reaches the server but returns "verifier busy" until Gemini is fixed.
 
 **Changed since the original plan:**
-- Vishaal hands over all remaining technical work to Justin and focuses on the pitch full-time (§13, §15).
-- **Supabase only:** Tiger Data dropped. All data lives in Supabase Postgres; Timescale features replaced by plain tables and views; the Tiger prize track is no longer targeted (§15).
+- Vishaal handed all remaining technical work to Justin and is on the pitch full-time (§13, §15).
+- **Supabase only:** Tiger Data was dropped. Data lives in Supabase Postgres; plain tables and views replace the Timescale features, and the Tiger prize track is no longer targeted (§15).
 - Photo verification uses **Gemini** (hackathon credits) instead of Claude.
 - Completing a quest no longer clears extra fog (Q-9 removed; §15).
-- Justin's code lives in a local Swift package (`Packages/FogKit`) that the app imports, not in app folders. Ayman implements the `ExplorationClearing` protocol instead of subscribing to location himself. See `Packages/FogKit/README.md`.
+- Justin's code lives in a local Swift package (`Packages/FogKit`). Ayman's store implements FogKit's `ExplorationClearing` protocol. See `Packages/FogKit/README.md`.
+- No Apple Developer account: sign-in is Supabase anonymous auth (§15).
+- **Territory leaderboards are back in scope** (2026-11-22): per-area rankings by % explored, time and distance (§15, docs/api.md §7).
 
-### Justin: what's next (in order)
+### Left to do for the demo
 
-1. ~~Create the Supabase project and Gemini key~~ ✅ Done; keys are in `.env` (never committed). Gemini works but is intermittently slow/overloaded (503s, 38–51 s responses): `verify-quest` must use low thinking, retries and a ~10 s cap.
-2. ~~Settle the open decisions in `docs/api.md` and remove the quest reveal~~ ✅ Done: D1–D12 accepted as proposed; `reveal_radius_m` and `reveal` removed from the contract and mocks (API v0.2).
-3. ~~Align `FogNetworking` with `docs/api.md`~~ ✅ Done: all request/response types match v0.2 and are tested against every file in `docs/mocks`; error codes map to quest states; 401 → refresh token and retry once; `StickerStorage` upload removed (D3); `POST profile` added. 57 FogKit tests pass.
-4. ~~Write the Edge Functions~~ ✅ Done and deployed: `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST). Local smoke test 24/24 (`npm run functions:smoke`). **Blocked on Gemini reliability:** verification currently returns `verifier_unavailable`; switch model via the `GEMINI_MODEL` secret once one responds.
-5. **Write and tune the `verify-quest` prompt** (Gemini vision) with a folder of test photos: real objects, photos of screens, wrong objects.
-6. ~~Cloud setup~~ ✅ Done: migrations, buckets, Gemini secret, functions deployed; the app talks to the live project (`Config/SupabaseConfig.swift`) with FogKit's `SupabaseAnonymousAuth` (anonymous sign-in, Keychain session, token refresh). Verified on a clean Simulator install: real quest loads, tiles and pings sync.
-7. **Seed data:** ✅ quests seeded from OpenStreetMap for 2026-11-21 → 27 (`npm run db:seed-quests`). Remaining: seed the demo account (past expeditions, stickers, a streak) and a hand-placed stage-demo quest (D11).
-8. **Restore fog after reinstall** (D8): when local tiles are empty, call `GET profile?include=tiles` and hand the tiles to Ayman's store.
-9. **Quest refresh timing:** refetch at `resets_at`, on app foreground, and when crossing into a new region.
-10. **Test on a real iPhone:** walking GPS, background location with the screen locked, camera, Vision sticker cutout.
-11. **Draw the real demo route** in gpx.studio and replace `Packages/FogKit/Sources/FogLocation/Resources/demo-route.gpx`.
-12. **Integrate teammates' pieces as they land:** Ayman's `ExplorationStore` and Jonathan's `AuthService` in `FogOfWarApp.swift`, then remove `Dev/` once Jonathan's screens cover the flow.
+**Jonathan (UI)**
+1. **Real stickers in Profile:** replace the placeholder `BoardSticker`s with `services.profile.stickers` (`imageURL`, or `localImageURL` right after capture), and show `missedDays` as greyed-out silhouettes.
+2. **Remove the `"Jonathan Zhou"` fallback** in `ProfilePage` (`services.profile.username ?? "Jonathan Zhou"`).
+3. **Onboarding:** username screen calling `services.profile.setUsername(_:)` (errors `invalid_username` / `username_taken`), plus location and camera permission screens (`LocationPermissions`).
+4. **Designed expedition recap card** to replace `RecapSheet` (export with `ShareImage.render`). Then delete `Dev/`.
+5. **Place `PathTraceMapView`** (Ayman's) in Profile, using `services.profile.routeSegments`.
+6. **Streak and weekly chart** in Profile, if they're in the design (`services.profile.stats.currentStreak`, `weeklyActivity`).
 
-If this is too much for one person, the easiest pieces to hand off are step 7 (seeding) and step 10 (device testing).
+**Justin**
+
+7. **Gemini:** get a reliable key or model from the organizers or Google sponsor, then retest. The model is switchable without code changes via the `GEMINI_MODEL` secret. Fallback for the stage: Debug menu → On-device verifier.
+8. **Test on a real iPhone:** walking GPS, background location with the screen locked, camera, Vision sticker cutout (doesn't run in the Simulator).
+9. **Seed the demo phone:** Debug menu → copy **Your user ID** → `npm run db:seed-demo -- --user <id> --username <name> --apply` → Debug menu → **Restore fog from server** (steps in `docs/backend.md`).
+10. **Stage-demo quest** at the venue, for the object Vishaal brings (D11). Insert it before seeding that day.
+11. **Real Auto-Walk route:** replace the placeholder `Packages/FogKit/Sources/FogLocation/Resources/demo-route.gpx` (draw it in gpx.studio, or record it while device testing).
+12. **Prompt tuning** with real photos (objects, photos of screens, wrong objects) once Gemini works.
+
+**Vishaal (pitch)**
+
+13. Slides, 3-minute script (demo script in §13), Devpost write-up, backup demo video, rehearsals; pick the on-stage quest object (D11).
+
+### Nice to have
+- Re-fetch the quest at midnight (`resets_at`), on app foreground and when entering a new region (Justin).
+- Fog performance on a real phone with thousands of tiles (Ayman).
+- App icon and real sticker art instead of the emoji placeholders (Jonathan).
 
 ## 1. Summary
 
@@ -68,7 +86,7 @@ We are building **two core loops and polishing them**, not a wide feature set.
 4. **Profile:** sticker book, path tracing, lifetime stats.
 5. **Demo mode:** joystick and route playback so the demo works on stage without GPS.
 
-**Cut from the hackathon** (moved to §14, Future Ideas): neighbourhood % and leaderboards, Mayor titles, loot crates, badges and titles, guilds and shared maps, satellite map toggle.
+**Cut from the hackathon** (moved to §14, Future Ideas). *Update 2026-11-22: territory leaderboards were added back (see §0).* Neighbourhood % and leaderboards, Mayor titles, loot crates, badges and titles, guilds and shared maps, satellite map toggle.
 
 Rule for the team: if a task isn't on the in-scope list, it waits until the core is polished and the demo has been rehearsed.
 
@@ -510,7 +528,7 @@ Vishaal wrote the API contract and the database schema, then handed all remainin
 - [x] `verify-quest` Edge Function: checks, geofence, attempt limit, Gemini vision call, Storage upload on success (Q-7, §10.5). *Gemini itself is unreliable right now*
 - [ ] Prompt tuning with a folder of test photos (real objects, photos of screens, wrong objects)
 - [x] Seed `daily_quests` for the campus area from OpenStreetMap (Q-1, Q-2, Q-3)
-- [ ] Seed the demo account (past expeditions, stickers, a streak)
+- [x] Demo-account seed script (past expeditions on real paths, stickers, streak, missed days); run it for the demo phone's user id
 - [ ] Draw the real demo route in gpx.studio for Auto-Walk
 
 #### Jonathan: Front-end design, quest experience, Profile UI & sign-in
@@ -601,6 +619,7 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Database | **Supabase Postgres only** (changed 2026-11-21; briefly planned Tiger Data for the prize track) | One service instead of two. TimescaleDB isn't available on Supabase Postgres 17, so hypertables/continuous aggregates became plain tables and views, which are fine at hackathon scale. The Tiger prize track is no longer targeted |
 | Technical ownership | Vishaal hands all remaining technical work (Edge Functions, cloud setup, prompt, seeding) to Justin and focuses on the pitch | Lets Vishaal focus on the pitch; one person owning both sides of the API removes the biggest integration risk. Vishaal's contract and schema were high quality and are kept as-is |
 | AI verification provider | Gemini instead of Claude | Hack Western provides Gemini credits |
+| Territory leaderboards | Added back to scope: per-area rankings (campus, parks, Downtown) by % explored, time explored and distance explored. Areas from OpenStreetMap; Downtown is a hand-drawn approximation (OSM has no London neighbourhood polygons). Only usernames and totals are shown | Requested by the team; gives the demo a social/competitive angle. Paths and positions stay private |
 | Sign-in | Supabase anonymous sign-in + username; no Sign in with Apple | Nobody on the team has a paid Apple Developer account, which Sign in with Apple requires |
 | Name | Keep "Fog of War IRL" for the hackathon | Says exactly what the app does in a 3-minute pitch |
 

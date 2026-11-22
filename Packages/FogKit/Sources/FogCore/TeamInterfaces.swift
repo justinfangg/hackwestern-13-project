@@ -14,6 +14,14 @@ public protocol ExplorationClearing: AnyObject {
 
     /// Demo "Reset fog" (PRD D-6): forget every cleared tile.
     func resetAll()
+
+    /// Number of tiles cleared on this device.
+    var clearedTileCount: Int { get }
+
+    /// Adds tiles restored from the server after a reinstall (docs/api.md D8). No animation needed,
+    /// and FogKit doesn't sync them back. - Returns: how many were new on this device.
+    @discardableResult
+    func restore(tiles: [TileID]) -> Int
 }
 
 /// Implemented by Jonathan's `AuthService` (Supabase anonymous sign-in).

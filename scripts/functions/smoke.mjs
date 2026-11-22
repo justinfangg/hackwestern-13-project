@@ -39,6 +39,7 @@ async function call(token, name, { method = "GET", query = "", body } = {}) {
 const TARGET = { lat: 43.0087, lng: -81.2731 };
 const FAR = { lat: 43.00935, lng: -81.2725 };
 let userId, questId;
+let QUEST = { ...TARGET, category: "bench" }; // where today's quest actually is
 try {
   // ---- anonymous sign-in
   const signup = await fetch(`${API}/auth/v1/signup`, {
@@ -59,9 +60,12 @@ try {
   // ---- seed today's quest in this region (replaces any existing one for the test)
   const region = BigInt("0x" + latLngToCell(TARGET.lat, TARGET.lng, 7)).toString();
   const [{ today }] = await sql`select (now() at time zone ${TZ})::date::text as today`;
-  const [existing] = await sql`select id from daily_quests where region_h3 = ${region} and quest_date = ${today}`;
+  const [existing] = await sql`select id, category, st_y(target::geometry) as lat, st_x(target::geometry) as lng
+                                from daily_quests where region_h3 = ${region} and quest_date = ${today}`;
   if (existing) {
+    // Today's quest is already seeded (e.g. from seed-quests): use its real target and category.
     questId = existing.id;
+    QUEST = { lat: existing.lat, lng: existing.lng, category: existing.category };
   } else {
     [{ id: questId }] = await sql`
       insert into daily_quests (region_h3, quest_date, category, target, hint, place_name)
@@ -104,17 +108,17 @@ try {
   const verify = (where, extra = {}) => call(token, "verify-quest", { method: "POST", body: {
     quest_id: questId, lat: where.lat, lng: where.lng, accuracy_m: 5, captured_at: new Date().toISOString(),
     photo_jpeg_base64: tinyJpeg, sticker_png_base64: tinyPng, ...extra } });
-  r = await verify(FAR);
-  check(r.status === 422 && r.json.error?.code === "too_far" && r.json.error.details?.radius_m === 40,
+  r = await verify({ lat: QUEST.lat + 0.0006, lng: QUEST.lng + 0.0006 }); // ~80 m away
+  check(r.status === 422 && r.json.error?.code === "too_far" && r.json.error.details?.radius_m === 40 && r.json.error.details.distance_m > 60,
     "verify far away -> too_far", `${r.json.error?.details?.distance_m} m`);
-  r = await verify(TARGET, { quest_id: randomUUID() });
+  r = await verify(QUEST, { quest_id: randomUUID() });
   check(r.status === 404 && r.json.error?.code === "quest_not_found", "unknown quest -> quest_not_found");
-  r = await verify(TARGET, { lat: 999 });
+  r = await verify(QUEST, { lat: 999 });
   check(r.status === 400 && r.json.error?.details?.fields?.includes("lat"), "bad lat -> invalid_request");
 
   // ---- verify-quest with Gemini (a 1x1 test image: expect a rejection, or 502 if Gemini is overloaded)
   const started = Date.now();
-  r = await verify(TARGET);
+  r = await verify(QUEST);
   const secs = ((Date.now() - started) / 1000).toFixed(1);
   if (r.status === 200) {
     check(r.json.verified === false && r.json.attempts_left === 4 && r.json.completion === null,
@@ -127,7 +131,7 @@ try {
   // ---- simulate a verified completion directly, then check profile + already_completed
   await sql`insert into quest_attempts (user_id, quest_id, verified, confidence, reason) values (${userId}, ${questId}, true, 0.95, 'test')`;
   await sql`insert into quest_completions (quest_id, user_id, sticker_url, confidence) values (${questId}, ${userId}, 'https://example.invalid/s.png', 0.95)`;
-  r = await verify(TARGET);
+  r = await verify(QUEST);
   check(r.status === 409 && r.json.error?.code === "already_completed", "second verify -> already_completed");
   r = await call(token, "quest-today", { query: `?lat=${TARGET.lat}&lng=${TARGET.lng}` });
   check(r.json.completed_by_me === true && r.json.found_today >= 1, "quest-today shows completed + found_today");
@@ -138,11 +142,32 @@ try {
   check(r.status === 200 && p.username === name, "profile returns username");
   check(p.stats.tiles_cleared === 2 && p.stats.quests_completed === 1 && p.stats.current_streak === 1,
     "profile stats", JSON.stringify(p.stats));
-  check(p.stickers.length === 1 && p.stickers[0].category === "bench" && p.stickers[0].date === today, "profile stickers");
+  check(p.stickers.length === 1 && p.stickers[0].category === QUEST.category && p.stickers[0].date === today, "profile stickers");
   check(p.weekly_activity.length === 8 && p.weekly_activity.at(-1).new_tiles === 2, "weekly_activity: 8 weeks, this week's tiles");
   check(p.expeditions.length === 1 && p.expeditions[0].duration_s === 30, "profile expeditions");
   check(p.routes.length === 1 && p.routes[0].points.length >= 2, "route built from pings");
   check(p.tiles?.length === 2 && p.tiles.includes("8b2ab4634633fff"), "include=tiles returns hex ids");
+
+  // ---- leaderboard (territory)
+  const [{ inCampus }] = await sql`select count(*)::int as "inCampus" from areas a, location_pings lp
+    where a.id = 'western-campus' and lp.user_id = ${userId} and extensions.st_covers(a.boundary, lp.location)`;
+  r = await call(token, "leaderboard", { query: `?lat=${TARGET.lat}&lng=${TARGET.lng}` });
+  const campus = r.json.areas?.find((a) => a.id === "western-campus");
+  check(r.status === 200 && r.json.areas?.[0]?.id === "western-campus", "leaderboard areas: nearest first is campus",
+    `${r.json.areas?.length} areas`);
+  check(campus && Math.abs(campus.mine.distance_m - (inCampus === 4 ? 30 : campus.mine.distance_m)) < 1.5 && campus.mine.time_s >= 0,
+    "leaderboard areas: my stats in campus", JSON.stringify(campus?.mine));
+  for (const metric of ["percent", "time", "distance"]) {
+    r = await call(token, "leaderboard", { query: `?area=western-campus&metric=${metric}` });
+    const mine = r.json.entries?.find((e) => e.is_me);
+    const expectListed = metric === "percent" ? campus?.mine.percent > 0 : campus?.mine[metric === "time" ? "time_s" : "distance_m"] > 0;
+    check(r.status === 200 && r.json.metric === metric && (!expectListed || (mine?.name === name && r.json.me?.rank === mine.rank)),
+      `leaderboard ${metric}: ranking includes me by username`, mine ? `rank ${mine.rank} of ${r.json.total_players}, ${mine.value}` : "not ranked");
+  }
+  check((await call(token, "leaderboard", { query: "?area=western-campus&metric=speed" })).json.error?.code === "invalid_request",
+    "leaderboard bad metric -> invalid_request");
+  check((await call(token, "leaderboard", { query: "?area=nowhere&metric=time" })).json.error?.code === "area_not_found",
+    "leaderboard unknown area -> area_not_found");
 } catch (e) {
   failures++;
   console.error("ERROR", e);

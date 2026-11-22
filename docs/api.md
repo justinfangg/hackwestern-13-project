@@ -1,8 +1,8 @@
 # Fog of War IRL: Backend API contract
 
-Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.2 (2026-11-21): decisions settled, quest reveal removed**
+Owner: Justin (written by Vishaal) · Client: Justin (`APIClient`) · Status: **v0.3 (2026-11-22): adds §7 territory leaderboard**
 
-Four Supabase Edge Functions in front of the Supabase Postgres database. The app talks only to these functions. It never reads or writes database tables or Supabase Storage directly (row-level security blocks it).
+Five Supabase Edge Functions in front of the Supabase Postgres database. The app talks only to these functions. It never reads or writes database tables or Supabase Storage directly (row-level security blocks it).
 Mock responses live in [`docs/mocks/`](mocks/), one file per response. Build against the mocks until the functions are live.
 Design decisions are marked (D1)–(D12) and listed under [Decisions](#decisions). All were accepted as proposed on 2026-11-21.
 
@@ -228,6 +228,33 @@ Username rules (D1):
 - Stored as typed. Uniqueness is **case-insensitive** (`Vishaal` blocks `vishaal`).
 - Setting the username you already have → `200`.
 - A rule break → `400 invalid_username`. Taken → `409 username_taken` ([mock](mocks/profile-post.409.json)).
+
+---
+
+## 7. `GET leaderboard` (territory)
+
+Territory leaderboards per named area: Western's campus, parks, and neighbourhoods (`supabase/seed/areas.json`; Downtown London is hand-drawn and approximate). Only usernames and totals are returned, never anyone's paths or position. Users without a username appear as `Explorer XXXX` (first 4 characters of their id).
+
+**Areas:** `GET leaderboard?lat=<lat>&lng=<lng>` (lat/lng optional; with them, areas are sorted nearest first) ([mock](mocks/leaderboard-areas.200.json)):
+```json
+{ "areas": [{ "id": "western-campus", "name": "Western University", "kind": "campus", "total_tiles": 858,
+              "distance_from_me_m": 0, "mine": { "percent": 12.4, "time_s": 5340, "distance_m": 6874.2 } }] }
+```
+
+**Ranking:** `GET leaderboard?area=<id>&metric=percent|time|distance` ([mock](mocks/leaderboard.200.json)):
+```json
+{ "area": { "id": "western-campus", "name": "Western University", "kind": "campus", "total_tiles": 858 },
+  "metric": "percent", "total_players": 4,
+  "entries": [{ "rank": 1, "name": "mapmaker_ana", "value": 41.2, "is_me": false }],
+  "me": { "rank": 3, "name": "vishaal", "value": 12.4, "is_me": true } }
+```
+| Metric | `value` | Computed from |
+|---|---|---|
+| `percent` | 0–100 | cleared res 11 tiles inside the area ÷ the area's `total_tiles` (tiles whose centre is inside the boundary) |
+| `time` | seconds | sum of `segment_s` of the player's GPS pings inside the boundary |
+| `distance` | metres | sum of `segment_m` of the player's GPS pings inside the boundary |
+
+`entries` is the top 50, best first; ties share a rank. `me` is the caller's row even outside the top 50, or `null` with no score yet. Players with 0 aren't listed. Errors: `400 invalid_request` (bad `metric` or `lat`/`lng`), `404 area_not_found` ([mock](mocks/leaderboard.404.json)).
 
 ---
 

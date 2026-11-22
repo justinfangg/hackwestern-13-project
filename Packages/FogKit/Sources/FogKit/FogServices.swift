@@ -34,8 +34,13 @@ public final class FogServices {
     public let quests: QuestService
     public let questCapture: QuestCaptureModel
     public let profile: ProfileModel
+    public let leaderboard: LeaderboardModel
     public let api: FogAPI
     public let usingMockBackend: Bool
+    /// Tiles restored from the server at launch (nil until a restore happened).
+    public private(set) var restoredTileCount: Int?
+    /// The signed-in user's Supabase id, once the profile has loaded.
+    public var userID: UUID? { profile.remote?.userId }
 
     @ObservationIgnored private let remoteVerifier: QuestVerifying
     @ObservationIgnored private let onDeviceVerifier = OnDeviceQuestVerifier()
@@ -44,11 +49,15 @@ public final class FogServices {
                 auth: AuthTokenProviding?,
                 backend: BackendConfig?,
                 debug: DebugSettings? = nil,
-                storageDirectory: URL? = nil) {
+                storageDirectory: URL? = nil,
+                api apiOverride: FogAPI? = nil) {
         let debug = debug ?? DebugSettings()
         self.debug = debug
 
-        if let auth, let backend, !debug.useMockBackend {
+        if let apiOverride {
+            api = apiOverride
+            usingMockBackend = apiOverride is MockFogAPI
+        } else if let auth, let backend, !debug.useMockBackend {
             api = LiveFogAPI(config: backend, auth: auth)
             usingMockBackend = false
         } else {
@@ -67,6 +76,7 @@ public final class FogServices {
                                          stickerCache: LocalStickerStorage(directory: storageDirectory?.appendingPathComponent("stickers")),
                                          location: location)
         profile = ProfileModel(api: api, history: history)
+        leaderboard = LeaderboardModel(api: api)
 
         wire()
         applyDebugSettings()
@@ -75,9 +85,22 @@ public final class FogServices {
 
     /// Call once at launch (after location permission is granted, or it will prompt).
     public func start() {
+        // Check before location starts: the first GPS fix clears tiles immediately.
+        let needsRestore = pipeline.explorer.clearedTileCount == 0
         location.start()
         sync.startAutoSync()
-        Task { await refreshQuest() }
+        Task {
+            await refreshQuest()
+            if needsRestore { await restoreFog() } else { await profile.refresh() }
+        }
+    }
+
+    /// Restores this user's cleared tiles from the server (docs/api.md D8). Used after a reinstall,
+    /// and for the seeded demo account. Tiles already on the device are kept.
+    public func restoreFog() async {
+        await profile.refresh(includeTiles: true)
+        guard let tiles = profile.remote?.tiles, !tiles.isEmpty else { return }
+        restoredTileCount = pipeline.explorer.restore(tiles: tiles)
     }
 
     /// Fetch today's quest for the current position and hand it to the capture flow.

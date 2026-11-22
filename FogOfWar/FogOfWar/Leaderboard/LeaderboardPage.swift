@@ -65,7 +65,7 @@ struct LeaderboardPage: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Territory")
+                Text("Leaderboard")
                     .font(SideQuestDesign.calSans(22))
                     .tracking(-0.22)
                     .foregroundStyle(.black)
@@ -243,7 +243,8 @@ private struct MetricCard: View {
 
     var body: some View {
         Button(action: action) {
-            TerritoryFormat.color(for: metric)
+            // Only the selected metric is in colour; the others are greyed out.
+            (isSelected ? TerritoryFormat.color(for: metric) : SideQuestDesign.metricInactive)
                 .frame(maxWidth: .infinity)
                 .frame(height: 75)
                 .overlay(alignment: .topTrailing) {
@@ -270,12 +271,6 @@ private struct MetricCard: View {
                         .padding(.bottom, 6)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(SideQuestDesign.primaryText, lineWidth: isSelected ? 2.5 : 0)
-                        .padding(-4)
-                }
-                .opacity(isSelected ? 1 : 0.55)
                 .scaleEffect(isSelected ? 1 : 0.96)
                 .animation(.spring(duration: 0.3, bounce: 0.2), value: isSelected)
         }
@@ -343,6 +338,8 @@ private struct RankRow: View {
 extension SideQuestDesign {
     /// Third stat colour for "time explored", alongside the city (green) and travel (blue) cards.
     static let timeCard = Color(red: 0x9A / 255, green: 0x5B / 255, blue: 0x1E / 255)
+    /// Unselected leaderboard metric cards.
+    static let metricInactive = Color(red: 0xB4 / 255, green: 0xB6 / 255, blue: 0xB4 / 255)
 }
 
 enum TerritoryFormat {

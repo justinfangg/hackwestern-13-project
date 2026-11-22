@@ -262,7 +262,7 @@ struct ProfilePage: View {
                     .background(Circle().fill(SideQuestDesign.primaryText))
             }
             .padding(.trailing, 8)
-            .accessibilityLabel("Territory leaderboard")
+            .accessibilityLabel("Leaderboard")
 
             Image("ProfileAvatar")
                 .resizable()

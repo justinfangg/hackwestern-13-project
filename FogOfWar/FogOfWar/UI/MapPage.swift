@@ -29,6 +29,8 @@ struct MapPage: View {
     @State private var isResultExpanded = false
     /// Set when a quest is opened in the sheet: the map zooms to its target.
     @State private var questFocus: MapFocus?
+    /// The quest row open in the Quests sheet (from a row tap or a beacon tap).
+    @State private var openQuestID: UUID?
 
     /// The sheet sits 14 pt above the tab bar (Figma: 377 pt wide, bottom at 793 of 874).
     private static let sheetBottomMargin: CGFloat = MainTabBar.reservedHeight + 14
@@ -124,11 +126,7 @@ struct MapPage: View {
             focus: questFocus,
             onMapTap: { _ in },
             onFollowingChanged: { isFollowingUser = $0 },
-            onQuestSelected: { id in
-                // Tapping a beacon picks that quest (outlined in the sheet) unless one is under way.
-                if !isOnQuest, let uuid = UUID(uuidString: id) { services.selectQuest(uuid) }
-                isQuestSheetExpanded = true
-            }
+            onQuestSelected: showQuestFromMap
         )
     }
 
@@ -320,6 +318,7 @@ struct MapPage: View {
                     onExplore: startExploring
                 ) {
                     QuestSheetContent(
+                        openID: $openQuestID,
                         onOpen: openQuest,
                         onAccept: { services.selectQuest($0); acceptQuest() },
                         onTakePhoto: { services.selectQuest($0); takePhoto() }
@@ -359,6 +358,17 @@ struct MapPage: View {
                 right: 24
             )
         )
+    }
+
+    /// A beacon tapped on the map: does what tapping its row does (opens and
+    /// outlines the row, zooms the map to it) and opens the sheet to show it.
+    /// Ignored while a quest or free run is under way (the sheet is hidden then).
+    private func showQuestFromMap(_ id: String) {
+        guard !isOnQuest, let uuid = UUID(uuidString: id),
+              let option = services.quests.options.first(where: { $0.id == uuid }) else { return }
+        withAnimation(.spring(duration: 0.3, bounce: 0.1)) { openQuestID = uuid }
+        openQuest(option.quest)
+        isQuestSheetExpanded = true
     }
 
     /// Explore button: a free run with no target. Records time, distance,
@@ -528,13 +538,13 @@ struct MapPage: View {
 /// compact row (what to find, how far, how many found it). Tapping a row opens
 /// it to show the hint and its own Accept button, and zooms the map to it.
 private struct QuestSheetContent: View {
+    /// The row showing its details (one at a time). Also set by tapping a beacon on the map.
+    @Binding var openID: UUID?
     let onOpen: (Quest) -> Void
     let onAccept: (UUID) -> Void
     let onTakePhoto: (UUID) -> Void
 
     @Environment(FogServices.self) private var services
-    /// The row showing its details (one at a time).
-    @State private var openID: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -545,28 +555,34 @@ private struct QuestSheetContent: View {
                     .padding(.horizontal, 22)
                     .padding(.top, 8)
             } else {
-                ScrollView {
-                    VStack(spacing: 10) {
-                        ForEach(services.quests.options) { option in
-                            QuestOptionRow(
-                                option: option,
-                                isOpen: option.id == openID,
-                                onToggle: { toggle(option) },
-                                onAccept: { onAccept(option.id) },
-                                onTakePhoto: { onTakePhoto(option.id) }
-                            )
+                ScrollViewReader { scroller in
+                    ScrollView {
+                        VStack(spacing: 10) {
+                            ForEach(services.quests.options) { option in
+                                QuestOptionRow(
+                                    option: option,
+                                    isOpen: option.id == openID,
+                                    onToggle: { toggle(option) },
+                                    onAccept: { onAccept(option.id) },
+                                    onTakePhoto: { onTakePhoto(option.id) }
+                                )
+                                .id(option.id)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
+                    }
+                    .scrollIndicators(.hidden)
+                    // Bring the opened row (e.g. from a beacon tap) into view, details and all.
+                    .onChange(of: openID) { _, id in
+                        guard let id else { return }
+                        withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
+                            scroller.scrollTo(id, anchor: .top)
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 12)
-                    .padding(.bottom, 16)
                 }
-                .scrollIndicators(.hidden)
             }
-        }
-        // A beacon tapped on the map opens that quest's row.
-        .onChange(of: services.quests.selectedID) { _, id in
-            if openID != nil, let id { openID = id }
         }
     }
 

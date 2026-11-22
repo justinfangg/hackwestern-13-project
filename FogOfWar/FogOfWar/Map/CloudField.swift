@@ -1,3 +1,4 @@
+import Accelerate
 import MapKit
 import UIKit
 
@@ -20,6 +21,9 @@ nonisolated struct CloudSprite: Hashable, Sendable {
     let width: Double
     let height: Double
     let spriteIndex: Int
+    /// Grey shade, 0 (darkest) ..< `CloudSpriteAtlas.toneCount` (lightest). Neighbouring
+    /// banks share a shade, so the fog reads as lighter and darker layers.
+    let tone: Int
     let opacity: CGFloat
     let isFlipped: Bool
     let rotation: CGFloat
@@ -125,6 +129,23 @@ nonisolated enum CloudField {
         return FogNoise.smoothStep(0.28, 0.72, raw)
     }
 
+    /// Shade of the fog around a bank center: a slow noise field over a few banks, so whole patches
+    /// come out lighter or darker. Most of the map stays at the middle shades.
+    private static func tone(level: Int, x: Double, y: Double, slot: Int) -> Int {
+        let spacing = spacing(level: level)
+        let raw = FogNoise.fbm(
+            x: x / (spacing.x * 4.5),
+            y: y / (spacing.y * 4.5),
+            seed: UInt64(truncatingIfNeeded: level &* 31_337 &+ 2_718_281),
+            octaves: 2
+        )
+        let shade = FogNoise.smoothStep(0.25, 0.75, raw)
+        var tone = Int((shade * Double(CloudSpriteAtlas.toneCount)).rounded(.down))
+        // Wisps drift in front of the banks: one step lighter reads as a separate layer.
+        if slot == 1 { tone += 1 }
+        return min(max(tone, 0), CloudSpriteAtlas.toneCount - 1)
+    }
+
     private static func cloud(level: Int, column: Int, row: Int, slot: Int, density: Double) -> CloudSprite? {
         var random = SplitMix64(seed: seed(level: level, column: column, row: row, slot: slot))
         let spacing = spacing(level: level)
@@ -173,6 +194,7 @@ nonisolated enum CloudField {
             width: width,
             height: width * heightRatio,
             spriteIndex: Int(random.next() % UInt64(CloudSpriteAtlas.spriteCount)),
+            tone: tone(level: level, x: x, y: y, slot: slot),
             opacity: CGFloat(min(max(opacity, 0.1), 0.95)),
             isFlipped: random.nextUnit() < 0.5,
             rotation: CGFloat((random.nextUnit() - 0.5) * 0.5)
@@ -260,19 +282,52 @@ nonisolated enum FogNoise {
 nonisolated final class CloudSpriteAtlas: @unchecked Sendable {
     static let shared = CloudSpriteAtlas()
     static let spriteCount = 10
+    /// Each texture is rendered in this many greys, darkest first (see `tones`).
+    static let toneCount = 4
+    /// (light core, dark edge) grey per tone. Tone 1 is the original fog colour; the others are
+    /// a touch darker or noticeably lighter so patches of fog read as separate layers.
+    private static let tones: [(light: Double, dark: Double)] = [
+        (0.81, 0.73),
+        (0.85, 0.77),
+        (0.90, 0.83),
+        (0.95, 0.89),
+    ]
     /// Fog is soft, so a low-resolution texture scaled up looks identical and
     /// is far cheaper to draw than the previous blurred vector sprites.
     private static let pixelSize = 96
+    /// Softening applied to every texture once, when it's generated: the width in texture pixels
+    /// of the tent (≈ Gaussian) blur. Odd. 96 px textures, so 13 blurs edges by about 7%.
+    private static let blurKernel = 13
 
     let images: [CGImage?]
 
     private init() {
-        images = (0 ..< Self.spriteCount).map { Self.renderSprite(index: $0) }
+        images = (0 ..< Self.toneCount).flatMap { tone in
+            (0 ..< Self.spriteCount).map { Self.renderSprite(index: $0, tone: Self.tones[tone]) }
+        }
     }
 
-    func image(at index: Int) -> CGImage? {
-        guard images.indices.contains(index) else { return nil }
-        return images[index]
+    func image(at index: Int, tone: Int) -> CGImage? {
+        let slot = tone * Self.spriteCount + index
+        guard index >= 0, index < Self.spriteCount, images.indices.contains(slot) else { return nil }
+        return images[slot]
+    }
+
+    /// Tent-blurs premultiplied RGBA pixels in place (edges extend, so nothing darkens at the border).
+    private static func blur(_ pixels: inout [UInt8], size: Int) {
+        let kernel = UInt32(blurKernel | 1)
+        var output = [UInt8](repeating: 0, count: pixels.count)
+        let ok = pixels.withUnsafeMutableBytes { src -> Bool in
+            output.withUnsafeMutableBytes { dst -> Bool in
+                var source = vImage_Buffer(data: src.baseAddress, height: vImagePixelCount(size),
+                                           width: vImagePixelCount(size), rowBytes: size * 4)
+                var destination = vImage_Buffer(data: dst.baseAddress, height: vImagePixelCount(size),
+                                                width: vImagePixelCount(size), rowBytes: size * 4)
+                return vImageTentConvolve_ARGB8888(&source, &destination, nil, 0, 0, kernel, kernel, nil,
+                                                   vImage_Flags(kvImageEdgeExtend)) == kvImageNoError
+            }
+        }
+        if ok { pixels = output }
     }
 
     private struct Lobe {
@@ -282,7 +337,7 @@ nonisolated final class CloudSpriteAtlas: @unchecked Sendable {
         let weight: Double
     }
 
-    private static func renderSprite(index: Int) -> CGImage? {
+    private static func renderSprite(index: Int, tone: (light: Double, dark: Double)) -> CGImage? {
         let size = pixelSize
         let seed = UInt64(index + 1) &* 0xD1B5_4A32_D192_ED03
         var random = SplitMix64(seed: seed)
@@ -307,8 +362,8 @@ nonisolated final class CloudSpriteAtlas: @unchecked Sendable {
         let erosion = 0.3 + random.nextUnit() * 0.25
 
         // Slightly warm grey: lighter in thick cores, darker in thin edges.
-        let light: (r: Double, g: Double, b: Double) = (0.85, 0.85, 0.84)
-        let dark: (r: Double, g: Double, b: Double) = (0.77, 0.77, 0.76)
+        let light: (r: Double, g: Double, b: Double) = (tone.light, tone.light, tone.light - 0.01)
+        let dark: (r: Double, g: Double, b: Double) = (tone.dark, tone.dark, tone.dark - 0.01)
 
         var pixels = [UInt8](repeating: 0, count: size * size * 4)
         for py in 0 ..< size {
@@ -350,6 +405,7 @@ nonisolated final class CloudSpriteAtlas: @unchecked Sendable {
             }
         }
 
+        blur(&pixels, size: size)
         guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
         return CGImage(
             width: size,

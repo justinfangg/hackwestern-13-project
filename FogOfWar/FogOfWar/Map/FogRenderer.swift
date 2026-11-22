@@ -55,12 +55,6 @@ final class FogRenderer: MKOverlayRenderer {
         stateLock.fogWithLock { lastDrawnCloudLevel }
     }
 
-    /// Cleared cells touching `mapRect`; used to cut explored ground out of
-    /// the blur that sits under the fog.
-    func clearedGeometries(intersecting mapRect: MKMapRect) -> [CellGeometry] {
-        stateLock.fogWithLock { clearedIndex.geometries(intersecting: mapRect) }
-    }
-
     /// Replaces the complete persisted cleared-cell snapshot without animating
     /// it. This is the startup/restore path and intentionally invalidates once.
     @MainActor
@@ -227,7 +221,7 @@ final class FogRenderer: MKOverlayRenderer {
         // Fog textures are soft and low-resolution; bilinear is plenty.
         context.interpolationQuality = .low
         for cloud in clouds {
-            guard let image = atlas.image(at: cloud.spriteIndex),
+            guard let image = atlas.image(at: cloud.spriteIndex, tone: cloud.tone),
                   !Self.isCloudCleared(cloud, among: clearCircles)
             else { continue }
 

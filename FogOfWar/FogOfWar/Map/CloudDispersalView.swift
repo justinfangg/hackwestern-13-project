@@ -48,7 +48,7 @@ final class CloudDispersalView: UIView {
         let reduceMotion = UIAccessibility.isReduceMotionEnabled
 
         for cloud in clouds where !puffs.contains(where: { $0.cloud == cloud }) {
-            guard let image = atlas.image(at: cloud.spriteIndex) else { continue }
+            guard let image = atlas.image(at: cloud.spriteIndex, tone: cloud.tone) else { continue }
             var random = SplitMix64(seed: UInt64(bitPattern: Int64(cloud.key.hashValue)))
 
             let distance = hypot(cloud.centerX - originPoint.x, cloud.centerY - originPoint.y)

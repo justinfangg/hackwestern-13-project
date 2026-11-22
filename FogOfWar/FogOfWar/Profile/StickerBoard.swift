@@ -13,7 +13,10 @@ import SwiftUI
 struct StickerBoard: View {
     var stickers: [BoardSticker] = BoardSticker.demo
     var label: String
-    var onSelect: (BoardSticker) -> Void = { _ in }
+    /// Hidden while it's shown elsewhere (the stats view's flying hero).
+    var hiddenStickerID: String? = nil
+    /// Tapped sticker and where it is on screen (center in global coordinates).
+    var onSelect: (BoardSticker, StickerPlacement) -> Void = { _, _ in }
 
     /// Maps world space (Figma board points) to the board on screen.
     struct Camera: Equatable {
@@ -71,6 +74,8 @@ struct StickerBoard: View {
     /// `nil` keeps the board fitted to all stickers (the default view).
     @State private var camera: Camera?
     @State private var boardSize: CGSize = .zero
+    /// Top-left of the board's content in global coordinates.
+    @State private var boardOrigin: CGPoint = .zero
     @State private var panStart: Camera?
     @State private var panBaseTranslation: CGSize = .zero
     @State private var pinchStart: Camera?
@@ -128,6 +133,7 @@ struct StickerBoard: View {
             .simultaneousGesture(magnifyGesture)
             .onAppear { boardSize = size }
             .onChange(of: size) { boardSize = size }
+            .onGeometryChange(for: CGPoint.self) { $0.frame(in: .global).origin } action: { boardOrigin = $0 }
             .accessibilityElement(children: .contain)
             .accessibilityZoomAction { action in
                 zoom(by: action.direction == .zoomIn ? 1.4 : 1 / 1.4,
@@ -164,7 +170,8 @@ struct StickerBoard: View {
                     .accessibilityLabel("\(sticker.accessibilityName) sticker")
                     .accessibilityHint("Opens the holographic sticker view")
                     .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { onSelect(sticker) }
+                    .accessibilityAction { select(sticker) }
+                    .opacity(sticker.id == hiddenStickerID ? 0 : 1)
                     .position(
                         x: center.x + (isLifted ? dragOffset.width : 0),
                         y: center.y + (isLifted ? dragOffset.height : 0)
@@ -425,7 +432,7 @@ struct StickerBoard: View {
            let sticker = stickers.first(where: { $0.id == id }) {
             touch = .idle
             latestTranslation = .zero
-            onSelect(sticker)
+            select(sticker)
             return
         }
 
@@ -463,6 +470,17 @@ struct StickerBoard: View {
         dropCount += 1
     }
 
+    /// Reports the sticker with its on-screen center and zoom, so it can fly from here.
+    private func select(_ sticker: BoardSticker) {
+        guard let index = stickers.firstIndex(where: { $0.id == sticker.id }) else { return }
+        let cam = currentCamera(in: boardSize)
+        let center = cam.view(worldCenter(of: store.placement(for: sticker, order: index)))
+        onSelect(sticker, StickerPlacement(
+            center: CGPoint(x: boardOrigin.x + center.x, y: boardOrigin.y + center.y),
+            scale: cam.scale
+        ))
+    }
+
     /// Unit vector from `center` toward `point`; grabbing near the middle peels the top edge.
     private static func direction(from center: CGPoint, to point: CGPoint) -> CGVector {
         let dx = point.x - center.x, dy = point.y - center.y
@@ -482,7 +500,7 @@ private enum StickerGeometry {
     /// rotated and centered at `center`.
     static func visibleBounds(of sticker: BoardSticker, at center: CGPoint) -> CGRect {
         let size = sticker.size
-        let unit = opaqueUnitRect(of: sticker.imageName)
+        let unit = opaqueUnitRect(of: sticker)
         // Opaque area inside the sticker's frame, relative to the frame's center.
         let art = CGRect(
             x: (sticker.imageRect.minX + unit.minX * sticker.imageRect.width) * size.width - size.width / 2,
@@ -511,16 +529,16 @@ private enum StickerGeometry {
     }
 
     /// Opaque region of an image as fractions of its size (whole image if unknown).
-    private static func opaqueUnitRect(of imageName: String) -> CGRect {
-        if let cached = opaqueRects[imageName] { return cached }
-        let rect = measureOpaqueRect(of: imageName) ?? CGRect(x: 0, y: 0, width: 1, height: 1)
-        opaqueRects[imageName] = rect
+    private static func opaqueUnitRect(of sticker: BoardSticker) -> CGRect {
+        if let cached = opaqueRects[sticker.imageName] { return cached }
+        let rect = measureOpaqueRect(of: sticker) ?? CGRect(x: 0, y: 0, width: 1, height: 1)
+        opaqueRects[sticker.imageName] = rect
         return rect
     }
 
     /// Scans a small alpha-only copy of the image; plenty for fitting.
-    private static func measureOpaqueRect(of imageName: String) -> CGRect? {
-        guard let cgImage = UIImage(named: imageName)?.cgImage else { return nil }
+    private static func measureOpaqueRect(of sticker: BoardSticker) -> CGRect? {
+        guard let cgImage = sticker.uiImage?.cgImage else { return nil }
         let longest = CGFloat(max(cgImage.width, cgImage.height))
         let factor = min(1, 128 / longest)
         let width = max(Int(CGFloat(cgImage.width) * factor), 1)
@@ -602,7 +620,7 @@ private struct StickerArt: View {
                     .transition(.opacity)
             } else {
                 // Shown for the moment it takes to render the outline.
-                Image(sticker.imageName)
+                Image(uiImage: sticker.uiImage ?? UIImage())
                     .resizable()
                     .frame(width: sticker.imageRect.width * canvas.width, height: sticker.imageRect.height * canvas.height)
                     .position(
@@ -629,7 +647,7 @@ private struct StickerArt: View {
                 height: sticker.imageRect.height * canvas.height
             )
             let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-                guard let art = UIImage(named: sticker.imageName) else { return nil }
+                guard let art = sticker.uiImage else { return nil }
                 return StickerOutline.render(
                     art,
                     cacheKey: sticker.id,

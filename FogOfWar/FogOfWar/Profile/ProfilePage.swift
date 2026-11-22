@@ -12,7 +12,12 @@ struct ProfilePage: View {
     @Environment(ExplorationStore.self) private var explorationStore
     @State private var coverage = CityCoverage()
     @State private var percentExplored: Double?
-    @State private var selectedSticker: BoardSticker?
+    /// The sticker whose stats are showing (kept while it flies back to the board).
+    @State private var focus: StickerFocus?
+    /// Drives the board ⇄ stats transition.
+    @State private var isFocused = false
+    /// Top-left of this page in global coordinates, to place the flying sticker.
+    @State private var pageOrigin: CGPoint = .zero
     /// Opens the territory leaderboard on this metric (trophy button or a stat card).
     @State private var territoryMetric: LeaderboardMetric?
 
@@ -24,16 +29,41 @@ struct ProfilePage: View {
     private static let bottomMargin: CGFloat = 30
     private static let minimumBoardHeight: CGFloat = 280
 
+    /// Board ⇄ stats: the sticker flies while the pages cross-fade through a blur.
+    private static let focusAnimation: Animation = .spring(duration: 0.55, bounce: 0.16)
+    private static let fadeBlur: CGFloat = 14
+
     init(contentHeight: CGFloat) {
         self.contentHeight = contentHeight
         #if DEBUG
-        _selectedSticker = State(initialValue: HolographicStickerDebugFixture.current?.boardSticker)
+        if let fixture = HolographicStickerDebugFixture.current {
+            _focus = State(initialValue: StickerFocus(
+                sticker: fixture.boardSticker,
+                source: nil,
+                expedition: fixture.expedition,
+                date: fixture.collectedSticker.collectedAt
+            ))
+            _isFocused = State(initialValue: true)
+        }
         #endif
     }
 
     var body: some View {
-        profileContent
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                profileContent
+                    .opacity(isFocused ? 0 : 1)
+                    .blur(radius: isFocused ? Self.fadeBlur : 0)
+                    .allowsHitTesting(focus == nil)
+                    .accessibilityHidden(focus != nil)
+
+                if let focus {
+                    stickerStats(focus, width: proxy.size.width)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+        }
+        .onGeometryChange(for: CGPoint.self) { $0.frame(in: .global).origin } action: { pageOrigin = $0 }
         .background {
             RoundedRectangle(cornerRadius: SideQuestDesign.containerCornerRadius, style: .continuous)
                 .fill(SideQuestDesign.profileSurface)
@@ -46,17 +76,6 @@ struct ProfilePage: View {
             percentExplored = await coverage.percentExplored(by: explorationStore.clearedCells)
         }
         .task { await services.profile.refresh() }
-        .fullScreenCover(item: $selectedSticker) { selectedSticker in
-            let detail = detailData(for: selectedSticker)
-            HolographicStickerDetailView(
-                sticker: selectedSticker,
-                collectedSticker: detail.collectedSticker,
-                expedition: detail.expedition,
-                isSample: detail.isSample,
-                onDismiss: { self.selectedSticker = nil }
-            )
-            .preferredColorScheme(.light)
-        }
         .fullScreenCover(item: $territoryMetric) { metric in
             LeaderboardPage(initialMetric: metric)
                 .environment(services)
@@ -73,8 +92,10 @@ struct ProfilePage: View {
                 .frame(height: Self.boardTop - Self.statsTop, alignment: .top)
 
             StickerBoard(
+                stickers: boardStickers,
                 label: Date.now.formatted(.dateTime.month(.abbreviated).year()),
-                onSelect: { selectedSticker = $0 }
+                hiddenStickerID: focus?.sticker.id,
+                onSelect: { openStats(for: $0, from: $1) }
             )
                 .frame(height: boardHeight)
         }
@@ -82,27 +103,107 @@ struct ProfilePage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
+    /// The Figma demo stickers; debug builds add stickers made by the camera bypass.
+    private var boardStickers: [BoardSticker] {
+        #if DEBUG
+        let debugStickers = services.profile.stickers.filter(\.isDebugBypass).reversed()
+            .enumerated().compactMap { BoardSticker.debugBypass($0.element, index: $0.offset) }
+        return BoardSticker.demo + debugStickers
+        #else
+        return BoardSticker.demo
+        #endif
+    }
+
     private var boardHeight: CGFloat {
         max(contentHeight - Self.boardTop - Self.bottomMargin, Self.minimumBoardHeight)
     }
 
-    private func detailData(for boardSticker: BoardSticker) -> (
-        collectedSticker: Sticker?,
-        expedition: ExpeditionSummary?,
-        isSample: Bool
-    ) {
-        #if DEBUG
-        if let fixture = HolographicStickerDebugFixture.current {
-            return (fixture.collectedSticker, fixture.expedition, true)
-        }
-        #endif
+    // MARK: Sticker stats
 
-        let collectedSticker = matchingSticker(for: boardSticker)
-        return (
-            collectedSticker,
-            collectedSticker.flatMap { matchingExpedition(for: $0) },
-            false
+    struct StickerFocus {
+        let sticker: BoardSticker
+        /// Where the sticker sat on the board, in this page's coordinates
+        /// (`nil` when opened without one; it fades in place instead).
+        let source: StickerPlacement?
+        let expedition: ExpeditionSummary?
+        /// Shown at the bottom of the stats page.
+        let date: Date?
+    }
+
+    /// The stats page plus the sticker flying between the board and its spot at the top.
+    @ViewBuilder
+    private func stickerStats(_ focus: StickerFocus, width: CGFloat) -> some View {
+        let rest = StickerStatsLayout.heroPlacement(for: focus.sticker, width: width)
+
+        StickerStatsView(
+            sticker: focus.sticker,
+            expedition: focus.expedition,
+            date: focus.date,
+            onDismiss: closeStats
         )
+            .opacity(isFocused ? 1 : 0)
+            .blur(radius: isFocused ? 0 : Self.fadeBlur)
+            .allowsHitTesting(isFocused)
+            .onAppear {
+                guard !isFocused else { return }
+                withAnimation(Self.focusAnimation) { isFocused = true }
+            }
+
+        StickerHeroView(
+            sticker: focus.sticker,
+            placement: isFocused ? rest : (focus.source ?? rest),
+            restScale: rest.scale,
+            movement: heroMovement(for: focus.sticker, rest: rest, width: width)
+        )
+        .opacity(focus.source == nil && !isFocused ? 0 : 1)
+        .allowsHitTesting(isFocused)
+    }
+
+    /// How far the sticker can be dragged around its spot without hitting the stats.
+    private func heroMovement(for sticker: BoardSticker, rest: StickerPlacement, width: CGFloat) -> CGSize {
+        CGSize(
+            width: max(0, min(48, (width - sticker.size.width * rest.scale) / 2 - 16)),
+            height: 14
+        )
+    }
+
+    private func openStats(for sticker: BoardSticker, from globalPlacement: StickerPlacement) {
+        guard focus == nil else { return }
+        let source = StickerPlacement(
+            center: CGPoint(
+                x: globalPlacement.center.x - pageOrigin.x,
+                y: globalPlacement.center.y - pageOrigin.y
+            ),
+            scale: globalPlacement.scale
+        )
+        // Shown at the board position first; `onAppear` then animates it up.
+        isFocused = false
+        focus = StickerFocus(
+            sticker: sticker,
+            source: source,
+            expedition: expedition(for: sticker),
+            date: date(for: sticker)
+        )
+    }
+
+    private func closeStats() {
+        guard focus != nil, isFocused else { return }
+        withAnimation(Self.focusAnimation, completionCriteria: .removed) {
+            isFocused = false
+        } completion: {
+            focus = nil
+        }
+    }
+
+    /// When the sticker was collected. The demo stickers have no record, so
+    /// they show today's date as a stand-in.
+    private func date(for boardSticker: BoardSticker) -> Date? {
+        if let collected = matchingSticker(for: boardSticker) { return collected.collectedAt }
+        return boardSticker.id.hasPrefix("demo.") ? .now : nil
+    }
+
+    private func expedition(for boardSticker: BoardSticker) -> ExpeditionSummary? {
+        matchingSticker(for: boardSticker).flatMap { matchingExpedition(for: $0) }
     }
 
     /// Board demo stickers intentionally have non-UUID ids, so they cannot be

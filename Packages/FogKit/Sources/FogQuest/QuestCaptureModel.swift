@@ -41,8 +41,17 @@ public final class QuestCaptureModel {
     public private(set) var attemptsLeft = 5
     /// Streak after the latest successful find.
     public private(set) var streak: Int?
+    /// Debug only (set by `FogServices` from `DebugSettings.isQuestCameraBypassActive`): the camera is usable
+    /// from any state and `capture(_:)` completes the quest with the given image, skipping the verifier.
+    public var debugBypassCamera = false
     /// True when the camera may be used (Q-5).
-    public var canCapture: Bool { state == .ready }
+    public var canCapture: Bool {
+        if debugBypassCamera { return quest != nil && state != .verifying }
+        return state == .ready
+    }
+
+    /// Marks stickers made by the debug bypass so the profile can tell them from real finds.
+    nonisolated public static let debugStickerHint = "Debug camera bypass"
 
     /// Called once per successful find (FogKit wires this to the expedition, quest count and profile).
     @ObservationIgnored public var onSuccess: ((Sticker, Quest) -> Void)?
@@ -115,7 +124,12 @@ public final class QuestCaptureModel {
 
     /// Submit a photo from the in-app camera (Q-6). Only works when `canCapture`.
     public func capture(_ photo: CGImage) async {
-        guard canCapture, let quest, let here = lastCoordinate else { return }
+        guard canCapture, let quest else { return }
+        if debugBypassCamera {
+            await completeWithoutVerification(sticker: photo, quest: quest)
+            return
+        }
+        guard let here = lastCoordinate else { return }
         state = .verifying
         let capturedAt = clock()
 
@@ -161,6 +175,22 @@ public final class QuestCaptureModel {
         onSuccess?(sticker, quest)
     }
 
+    /// Debug bypass: `image` is already a cut-out sticker, so there's no extraction, no upload to the
+    /// verifier and no attempt used. Each run gets a fresh quest id so repeat runs add new stickers.
+    private func completeWithoutVerification(sticker image: CGImage, quest: Quest) async {
+        state = .verifying
+        guard let png = ImageEncoding.png(ImageEncoding.downscaled(image, maxDimension: 512)) else {
+            state = .error("Couldn't process the debug photo.")
+            return
+        }
+        var sticker = Sticker(questID: UUID(), category: quest.category, questDate: quest.date,
+                              location: quest.target, placeName: quest.placeName,
+                              hint: Self.debugStickerHint, collectedAt: clock())
+        sticker.localImageURL = try? await stickerCache.upload(png: png, questID: sticker.id)
+        state = .success(sticker)
+        onSuccess?(sticker, quest)
+    }
+
     /// After `.rejected`, `.tooFar` or `.error`: back to `.ready` (or `.locked` if the user walked away).
     public func retry() {
         switch state {
@@ -191,4 +221,9 @@ public final class QuestCaptureModel {
             return .error("Couldn't reach the verifier. Check your connection and try again.")
         }
     }
+}
+
+extension Sticker {
+    /// Made by the debug camera bypass rather than a verified photo.
+    public var isDebugBypass: Bool { hint == QuestCaptureModel.debugStickerHint }
 }

@@ -1,6 +1,9 @@
 import CoreGraphics
 import Foundation
 import Observation
+import ImageIO
+import UIKit
+import FogKit
 
 /// A sticker on the profile's memory board.
 ///
@@ -28,6 +31,49 @@ struct BoardSticker: Identifiable, Sendable {
     let defaultCenter: CGPoint
 
     var accessibilityName: String
+    /// Artwork stored on disk (a collected sticker) instead of in the asset catalog.
+    var fileURL: URL? = nil
+}
+
+extension BoardSticker {
+    nonisolated(unsafe) private static let fileImageCache = NSCache<NSString, UIImage>()
+
+    /// The sticker artwork: the file when there is one, else the asset catalog image.
+    nonisolated var uiImage: UIImage? {
+        guard let fileURL else { return UIImage(named: imageName) }
+        if let cached = Self.fileImageCache.object(forKey: id as NSString) { return cached }
+        guard let image = UIImage(contentsOfFile: fileURL.path) else { return nil }
+        Self.fileImageCache.setObject(image, forKey: id as NSString)
+        return image
+    }
+
+    #if DEBUG
+    /// Debug-bypass stickers (Debug menu → "Bypass camera & Gemini") laid out on the board.
+    static func debugBypass(_ sticker: Sticker, index: Int) -> BoardSticker? {
+        guard let url = sticker.localImageURL,
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let w = props[kCGImagePropertyPixelWidth] as? Double,
+              let h = props[kCGImagePropertyPixelHeight] as? Double, w > 0, h > 0 else { return nil }
+        let longest: CGFloat = 170
+        let size = w >= h ? CGSize(width: longest, height: longest * h / w)
+                          : CGSize(width: longest * w / h, height: longest)
+        let slots = [CGPoint(x: 168, y: 262), CGPoint(x: 110, y: 60), CGPoint(x: 250, y: 380), CGPoint(x: 70, y: 470)]
+        let angle = Double(Int(sticker.id.uuid.0) % 41) - 20
+        return BoardSticker(
+            id: sticker.id.uuidString,
+            imageName: "debug.\(sticker.id.uuidString)",
+            size: size,
+            imageRect: CGRect(x: 0, y: 0, width: 1, height: 1),
+            rotation: angle,
+            outline: 9,
+            shadow: Shadow(opacity: 0.27, radius: 15, y: 5),
+            defaultCenter: slots[index % slots.count],
+            accessibilityName: "\(QuestCategory.displayName(sticker.category).capitalized) (debug)",
+            fileURL: url
+        )
+    }
+    #endif
 }
 
 extension BoardSticker {

@@ -53,6 +53,28 @@ import Testing
         #expect(v.calls == 0 && m.state == .locked)
     }
 
+    @Test func debugBypassCompletesFarAwayWithoutVerifier() async {
+        let (m, v) = makeModel([])
+        m.updateLocation(near(5_000))
+        #expect(m.state == .locked && !m.canCapture)
+        m.debugBypassCamera = true
+        #expect(m.canCapture)
+        var found: Sticker?
+        m.onSuccess = { s, _ in found = s }
+        await m.capture(solidImage())
+        #expect(v.calls == 0)
+        guard case .success(let sticker) = m.state else { Issue.record("expected success, got \(m.state)"); return }
+        #expect(sticker.isDebugBypass && sticker.localImageURL != nil && found == sticker)
+        #expect(m.attemptsLeft == 5)
+    }
+
+    @Test func bypassOffKeepsGeofenceLock() async {
+        let (m, v) = makeModel([.success(Self.ok)])
+        m.updateLocation(near(5_000))
+        await m.capture(solidImage())
+        #expect(v.calls == 0 && m.state == .locked)
+    }
+
     @Test func successCollectsServerStickerAndNotifies() async {
         let (m, v) = makeModel([.success(Self.ok)])
         var found: Sticker?

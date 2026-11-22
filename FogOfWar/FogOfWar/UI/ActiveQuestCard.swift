@@ -20,6 +20,8 @@ struct ActiveQuestCard: View {
     let onAbandon: () -> Void
     let onCapture: () -> Void
     let onPhoto: (CGImage) -> Void
+    /// Debug bypass: capture is always enabled and the shutter submits this image.
+    var debugPhoto: (() -> CGImage?)? = nil
 
     @State private var confirmAbandon = false
 
@@ -41,7 +43,8 @@ struct ActiveQuestCard: View {
                     onClose: {
                         withAnimation(Self.cameraTransition) { isCameraOpen = false }
                     },
-                    onPhoto: onPhoto
+                    onPhoto: onPhoto,
+                    debugPhoto: debugPhoto
                 )
                 .frame(height: cameraHeight)
                 .transition(.blurReplace)
@@ -122,6 +125,7 @@ struct ActiveQuestCard: View {
 
     /// In range, or retrying after a failed photo.
     private var canCapture: Bool {
+        if debugPhoto != nil { return captureState != .verifying }
         switch captureState {
         case .ready, .rejected, .tooFar, .error: return true
         default: return false

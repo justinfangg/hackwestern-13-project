@@ -44,9 +44,14 @@ public struct DebugMenuView: View {
                     if let routeError { Text(routeError).foregroundStyle(.red) }
                 }
             }
-            Section("Verification") {
+            Section {
                 Toggle("On-device verifier (no network)", isOn: $settings.useOnDeviceVerifier)
                 Toggle("Mock backend (applies on relaunch)", isOn: $settings.useMockBackend)
+                Toggle("Bypass camera & Gemini", isOn: $settings.bypassQuestCamera)
+            } header: {
+                Text("Verification")
+            } footer: {
+                Text("Quest camera works anywhere; the shutter submits a test sticker, skips Gemini and completes the quest. Debug builds only.")
             }
             Section {
                 Toggle("\(DebugSettings.fakeParticipantCount) explorers on every quest",

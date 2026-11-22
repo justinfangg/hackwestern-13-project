@@ -256,7 +256,8 @@ struct MapPage: View {
                     cameraHeight: cameraCardHeight,
                     onAbandon: abandonQuest,
                     onCapture: captureFromCard,
-                    onPhoto: submitPhoto
+                    onPhoto: submitPhoto,
+                    debugPhoto: debugPhoto
                 )
                 .padding(.horizontal, Self.questCardSideMargin)
                 .padding(.bottom, Self.questCardBottomMargin)
@@ -294,6 +295,10 @@ struct MapPage: View {
     /// The card's capture button doubles as "try again" after a failed photo.
     private func captureFromCard() {
         let capture = services.questCapture
+        if debugPhoto != nil {
+            takePhoto()
+            return
+        }
         switch capture.state {
         case .rejected, .tooFar, .error:
             capture.retry()
@@ -345,6 +350,15 @@ struct MapPage: View {
     private func submitPhoto(_ photo: CGImage) {
         withAnimation(ActiveQuestCard.cameraTransition) { isCameraOpen = false }
         Task { await services.questCapture.capture(photo) }
+    }
+
+    /// Debug bypass photo source; always nil in release builds.
+    private var debugPhoto: (() -> CGImage?)? {
+        #if DEBUG
+        services.debug.isQuestCameraBypassActive ? { DebugQuestPhoto.random() } : nil
+        #else
+        nil
+        #endif
     }
 
     /// Figma's 542 pt camera card, kept clear of the status bar on short screens.
@@ -419,6 +433,10 @@ private struct QuestSheetContent: View {
     private var captureAction: some View {
         let capture = services.questCapture
         switch capture.state {
+        case _ where services.debug.isQuestCameraBypassActive && capture.canCapture:
+            Button("Take photo", systemImage: "camera.fill", action: onTakePhoto)
+                .buttonStyle(.borderedProminent)
+                .tint(SideQuestDesign.questActive)
         case .ready:
             Button("Take photo", systemImage: "camera.fill", action: onTakePhoto)
                 .buttonStyle(.borderedProminent)

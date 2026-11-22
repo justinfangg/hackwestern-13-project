@@ -13,6 +13,9 @@ public final class DebugSettings {
     public var useOnDeviceVerifier: Bool { didSet { defaults.set(useOnDeviceVerifier, forKey: Keys.onDevice) } }
     /// Use the in-memory mock backend instead of Supabase.
     public var useMockBackend: Bool { didSet { defaults.set(useMockBackend, forKey: Keys.mock) } }
+    /// Debug only: the quest camera always works (any location), the shutter submits a bundled test
+    /// sticker instead of a real photo, and the quest completes without calling the verifier.
+    public var bypassQuestCamera: Bool { didSet { defaults.set(bypassQuestCamera, forKey: Keys.bypassCamera) } }
     /// Show every quest as having `fakeParticipantCount` explorers (demo: avatars, "+N" pill).
     public var fakeParticipants: Bool { didSet { defaults.set(fakeParticipants, forKey: Keys.fakeParticipants) } }
 
@@ -28,6 +31,15 @@ public final class DebugSettings {
     }
 
     public static let fakeParticipantCount = 6
+
+    /// `bypassQuestCamera`, but never in a release build, even if the flag was left on in UserDefaults.
+    public var isQuestCameraBypassActive: Bool {
+        #if DEBUG
+        bypassQuestCamera
+        #else
+        false
+        #endif
+    }
 
     /// The participant count to display for a quest whose real count is `real`.
     public func participantCount(real: Int) -> Int {
@@ -55,6 +67,7 @@ public final class DebugSettings {
         static let unlocked = "debug.unlocked", simulator = "debug.simulator"
         static let onDevice = "debug.onDeviceVerifier", mock = "debug.mockBackend"
         static let fakeParticipants = "debug.fakeParticipants"
+        static let bypassCamera = "debug.bypassQuestCamera"
         static let cityPercent = "debug.profile.cityPercent", cityName = "debug.profile.cityName"
         static let distanceKm = "debug.profile.distanceKm"
     }
@@ -66,6 +79,7 @@ public final class DebugSettings {
         useOnDeviceVerifier = defaults.bool(forKey: Keys.onDevice)
         useMockBackend = defaults.bool(forKey: Keys.mock)
         fakeParticipants = defaults.bool(forKey: Keys.fakeParticipants)
+        bypassQuestCamera = defaults.bool(forKey: Keys.bypassCamera)
         cityExploredPercentOverride = defaults.object(forKey: Keys.cityPercent) as? Double
         cityNameOverride = defaults.string(forKey: Keys.cityName)
         distanceKmOverride = defaults.object(forKey: Keys.distanceKm) as? Double

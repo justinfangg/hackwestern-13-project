@@ -157,12 +157,14 @@ public final class FogServices {
     private func applyDebugSettings() {
         location.setSimulating(debug.isSimulatorEnabled)
         questCapture.verifier = debug.useOnDeviceVerifier ? onDeviceVerifier : remoteVerifier
+        questCapture.debugBypassCamera = debug.isQuestCameraBypassActive
     }
 
     private func observeDebugSettings() {
         withObservationTracking {
             _ = debug.isSimulatorEnabled
             _ = debug.useOnDeviceVerifier
+            _ = debug.isQuestCameraBypassActive
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.applyDebugSettings()

@@ -9,6 +9,8 @@ struct QuestCameraView: View {
     let camera: CameraController
     let onClose: () -> Void
     let onPhoto: (CGImage) -> Void
+    /// Debug bypass: when set, the shutter works regardless of camera state and submits this image.
+    var debugPhoto: (() -> CGImage?)? = nil
 
     @State private var status: Status = .starting
     @State private var isCapturing = false
@@ -137,7 +139,7 @@ struct QuestCameraView: View {
             .contentShape(Circle())
         }
         .buttonStyle(ShutterButtonStyle())
-        .disabled(isCapturing || status == .starting || status == .denied)
+        .disabled(isCapturing || (debugPhoto == nil && (status == .starting || status == .denied)))
         .accessibilityLabel("Take photo")
         .padding(.bottom, 33)
     }
@@ -159,6 +161,11 @@ struct QuestCameraView: View {
         shutterCount += 1
         withAnimation(.easeOut(duration: 0.08)) { flash = true }
         withAnimation(.easeIn(duration: 0.3).delay(0.08)) { flash = false }
+
+        if let image = debugPhoto?() {
+            onPhoto(image)
+            return
+        }
 
         if status != .live {
             #if targetEnvironment(simulator)

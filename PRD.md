@@ -1,13 +1,13 @@
 # PRD: Fog of War IRL
 
 > Working title. Hack Western 13 project. Native iOS app (SwiftUI).
-> Status: Draft v0.2 (2026-11-21). Scope locked to core features. Progress last updated 2026-11-21 evening (see §0).
+> Status: Draft v0.2 (2026-11-21). Scope locked to core features. Progress last updated 2026-11-22 (see §0).
 
 ---
 
 ## 0. Progress
 
-Last updated 2026-11-21 (evening). Legend: ✅ done · 🟡 started / needs work · ⬜ not started.
+Last updated 2026-11-22. Legend: ✅ done · 🟡 started / needs work · ⬜ not started.
 Only work pushed to `main` is counted.
 
 ### Overall
@@ -18,18 +18,21 @@ Only work pushed to `main` is counted.
 | Xcode app project (iOS 17+, iPhone portrait, permissions, background location) | Justin | ✅ | `FogOfWar/` |
 | FogKit: location pipeline, Simulator Mode, expeditions, quest capture, camera, sticker cutout, networking, sync, anonymous sign-in, fog restore. 64 tests | Justin | ✅ (not yet tested on a real iPhone) | `Packages/FogKit/` |
 | API contract v0.2 + mocks, decisions D1–D12 settled | Vishaal → Justin | ✅ | `docs/api.md`, `docs/mocks/` |
-| Supabase project `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1): schema with row-level security, `stickers` + `quest-photos` buckets, anonymous sign-in, `GEMINI_API_KEY` secret | Justin | ✅ | `supabase/` |
+| Supabase project: schema with row-level security, `stickers` + `quest-photos` buckets, anonymous sign-in, `GEMINI_API_KEY` secret. Originally `fog-of-war` (ref `febubbwoyptplfnsdqkv`, us-east-1); **the app now points at a rebuilt project, `SideQuest` (ref `qsxakuynoyxsyxhkxvuo`)** with Jonathan's own Gemini key (see "Changed since the original plan") | Justin → Jonathan | ✅ base setup; 🟡 `SideQuest` is missing the territory migration and `leaderboard` function | `supabase/` |
 | Edge Functions `sync`, `quest-today`, `verify-quest`, `profile` (GET + POST), deployed. Smoke test 24/24 | Justin | ✅ | `supabase/functions/`, `scripts/functions/smoke.mjs` |
 | Daily quests from real OpenStreetMap objects on campus (Nov 7–27 seeded) | Justin | ✅ | `scripts/db/seed-quests.mjs` |
 | Demo-account seed (expeditions on real footpaths, stickers, 4-day streak, missed days) | Justin | ✅ script ready; ⬜ not yet run for the demo phone | `scripts/db/seed-demo.mjs` |
 | App connected to the live backend | Justin | ✅ | `FogOfWar/FogOfWar/Config/SupabaseConfig.swift` |
 | Photo verification with Gemini | Justin | 🟡 code done; **blocked**: the key is throttled (timeouts, 503s, empty 404s) | `supabase/functions/_shared/gemini.ts` |
 | H3 fog map: `ExplorationStore` (SwiftData), `TileMath`, `FogRenderer`, quest marker, `PathTraceMapView` | Ayman | ✅ (performance with thousands of tiles untested on a phone) | `FogOfWar/FogOfWar/Exploration/`, `Map/` |
-| Map page, home layout, cloud fog visuals, active-quest card, quest sheet, quest camera screen | Jonathan | ✅ | `FogOfWar/FogOfWar/UI/` |
-| Profile page: name, distance, city coverage, sticker board | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
+| Map page, cloud fog visuals, active-quest card, quest sheet, quest camera screen | Jonathan | ✅ | `FogOfWar/FogOfWar/UI/` |
+| **Tab-bar navigation** (Figma 55:3722): Social / Map / Leaderboard pages that slide left and right, each rounded to the iPhone's screen corners. Replaces the old map-over-profile split | Jonathan | ✅ | `UI/MainView.swift`, `UI/MainTabBar.swift` |
+| Map chrome from the new design: city name at the top, profile button top right (opens Profile as a sheet), locate button bottom right, wider Quests sheet with an **Explore** button | Jonathan | ✅ UI; ⬜ Explore does nothing yet | `UI/MapPage.swift`, `UI/QuestSheet.swift` |
+| Social page (first tab) | Jonathan | 🟡 empty placeholder | `Social/SocialPage.swift` |
+| Profile page: name, distance, city coverage, sticker board. Now opened from the profile button on the map | Jonathan | 🟡 uses placeholder stickers and a hard-coded fallback name | `FogOfWar/FogOfWar/Profile/` |
 | Onboarding (username + permission screens) | Jonathan | ⬜ | |
 | Designed expedition recap card | Jonathan | ⬜ (the app still uses Justin's plain `RecapSheet` from `Dev/`) | |
-| **Territory leaderboard** (% / time / distance explored per campus, park, neighbourhood): areas from OSM, `leaderboard` function, `LeaderboardModel`, Leaderboard page opened from Profile | Justin | ✅ deployed (smoke 31/31, 67 FogKit tests) | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
+| **Territory leaderboard** (% / time / distance explored per campus, park, neighbourhood): areas from OSM, `leaderboard` function, `LeaderboardModel`, Leaderboard page (now the third tab; the Profile trophy button still opens it full screen) | Justin | ✅ deployed on the original project (smoke 31/31, 67 FogKit tests); ⬜ not yet on `SideQuest`, so the tab shows "Couldn't load the leaderboard" | `supabase/functions/leaderboard/`, `FogOfWar/FogOfWar/Leaderboard/` |
 | Pitch | Vishaal | ⬜ | |
 
 **What works today:** open `FogOfWar/FogOfWar.xcodeproj` and run on the iPhone Simulator against the **live Supabase backend**. You get anonymous sign-in, today's real campus quest, Jonathan's map UI with Ayman's H3 fog clearing as you drive the joystick, expeditions with a recap, and tiles, GPS fixes and expeditions syncing to the cloud. Photo verification reaches the server but returns "verifier busy" until Gemini is fixed.
@@ -42,8 +45,15 @@ Only work pushed to `main` is counted.
 - Justin's code lives in a local Swift package (`Packages/FogKit`). Ayman's store implements FogKit's `ExplorationClearing` protocol. See `Packages/FogKit/README.md`.
 - No Apple Developer account: sign-in is Supabase anonymous auth (§15).
 - **Territory leaderboards are back in scope** (2026-11-22): per-area rankings by % explored, time and distance (§15, docs/api.md §7).
+- **Tab-bar navigation** (2026-11-22, Figma 55:3722): the drag-to-split between map and profile is gone. A bottom tab bar switches between three full-screen pages, **Social | Map | Leaderboard**, which slide left and right (0.3 s, no bounce). Profile is no longer a page: it opens as a sheet from the avatar button at the top right of the map (§9, §15).
+- **Map chrome moved** to match the design: city name pill at the top, locate button bottom right (always visible, hidden while the quest sheet is open or the camera is up), a wider Quests sheet sitting above the tab bar. The sheet has an **Explore** button for a future free-roam mode; it has no action yet.
+- **Supabase rebuilt on a new project:** Jonathan recreated the backend as project `SideQuest` (ref `qsxakuynoyxsyxhkxvuo`) with his own Gemini key, and `SupabaseConfig.swift` points at it. Setup was: link the CLI, `supabase db push --remote`, create the two buckets, `supabase secrets set GEMINI_API_KEY=…`, deploy the functions, `npm run db:seed-quests`, and **turn on anonymous sign-ins in the dashboard**. With that switch off, every request is rejected and the map shows no quest.
 
 ### Left to do for the demo
+
+**Backend on `SideQuest`**
+
+0. **Finish the rebuild:** run `supabase db push --remote` to apply `20261122000001_territory.sql`, then deploy the `leaderboard` function (`supabase functions deploy leaderboard`). Until then the Leaderboard tab can't load. Check that `GEMINI_API_KEY` is set and the model name in `GEMINI_MODEL` is valid for that key. Or point the app back at the original project in `SupabaseConfig.swift` (Justin).
 
 **Jonathan (UI)**
 1. **Real stickers in Profile:** replace the placeholder `BoardSticker`s with `services.profile.stickers` (`imageURL`, or `localImageURL` right after capture), and show `missedDays` as greyed-out silhouettes.
@@ -52,6 +62,8 @@ Only work pushed to `main` is counted.
 4. **Designed expedition recap card** to replace `RecapSheet` (export with `ShareImage.render`). Then delete `Dev/`.
 5. **Place `PathTraceMapView`** (Ayman's) in Profile, using `services.profile.routeSegments`.
 6. **Streak and weekly chart** in Profile, if they're in the design (`services.profile.stats.currentStreak`, `weeklyActivity`).
+6a. **Social page content** (first tab; empty for now) and the **Explore** button's free-roam mode.
+6b. **Real display-corner radius:** the tab pages are rounded with UIKit's private `_displayCornerRadius` (fallback 55 pt). Fine for the hackathon; replace with a fixed value before any App Store build.
 
 **Justin**
 
@@ -224,19 +236,38 @@ Priority: **P0** = must ship · **P1** = polish, done once all P0s work end to e
 | D-5 | Quest geofence can be satisfied in Simulator Mode; the camera step uses a real photo of a prop on stage | P0 |
 | D-6 | "Reset fog" button to restore a clean demo state | P0 |
 
+### 8.6 Navigation & Map Chrome
+
+| ID | Requirement | Priority |
+|---|---|---|
+| N-1 | Bottom tab bar with three tabs: Social, Map (default), Leaderboard. The selected tab has a white pill behind a green icon; the pill slides between tabs | P0 |
+| N-2 | Switching tabs slides the pages left or right (about 0.3 s, no bounce). Each page is a full-screen card with the iPhone display's corner radius | P0 |
+| N-3 | The tab bar hides while a quest is active, and accepting a quest returns to the Map tab | P0 |
+| N-4 | Map top bar: current city name centered, profile button at the top right that opens Profile as a sheet | P0 |
+| N-5 | Locate button at the bottom right of the map, above the Quests sheet, recenters on the player and resumes following. Hidden while the quest sheet is expanded or the camera is open | P0 |
+| N-6 | Quests sheet is wide, sits above the tab bar, and has an Explore button on its right for free-roam exploration | P1 (button only; no behavior yet) |
+| N-7 | Social page (first tab) | P1 (empty placeholder) |
+
 ## 9. Information Architecture / Screens
 
-Two tabs only. Fewer screens means more time to polish each one.
+Three tabs in a bottom tab bar (Figma 55:3722). Switching slides the pages left or right; each page is a full-screen card with the iPhone's own corner radius. The tab bar hides while a quest is active, and starting a quest always returns to the Map tab.
 
 ```
-TabView
-├── Map (default)
+Tab bar:  Social  |  Map (default)  |  Leaderboard
+├── Social
+│   └── Empty for now
+├── Map
 │   ├── Fog map + user avatar + quest marker
-│   ├── Top: quest card ("🪑 Find the bench • 420 m • 8 found today")
-│   ├── Bottom: Start/End Expedition button
-│   ├── Quest sheet: hint → Camera (unlocks at 40 m) → Verifying… → Sticker reveal
+│   ├── Top: city name (centered), profile button (top right → opens Profile sheet)
+│   ├── Bottom right: locate button (recenter on the player)
+│   ├── Quests sheet (wide, above the tab bar): hint → Accept → Camera (unlocks at 40 m)
+│   │   → Verifying… → Sticker reveal; "Explore" button on its right (free-roam mode, not built)
+│   ├── Active-quest card while on a quest (tab bar hidden)
 │   └── Expedition recap card → Share
-└── Profile
+└── Leaderboard
+    └── Territory rankings by % / time / distance per area
+
+Profile (sheet from the map's top-right button; its trophy button also opens the Leaderboard full screen)
     ├── Avatar, lifetime stats, streak
     ├── Sticker book grid
     ├── Path-tracing map
@@ -620,6 +651,8 @@ Until an interface is real, each owner ships a mock version on `main` so nobody 
 | Technical ownership | Vishaal hands all remaining technical work (Edge Functions, cloud setup, prompt, seeding) to Justin and focuses on the pitch | Lets Vishaal focus on the pitch; one person owning both sides of the API removes the biggest integration risk. Vishaal's contract and schema were high quality and are kept as-is |
 | AI verification provider | Gemini instead of Claude | Hack Western provides Gemini credits |
 | Territory leaderboards | Added back to scope: per-area rankings (campus, parks, Downtown) by % explored, time explored and distance explored. Areas from OpenStreetMap; Downtown is a hand-drawn approximation (OSM has no London neighbourhood polygons). Only usernames and totals are shown | Requested by the team; gives the demo a social/competitive angle. Paths and positions stay private |
+| Navigation | Bottom tab bar with Social, Map and Leaderboard pages that slide horizontally; Profile opens as a sheet from the map's avatar button (2026-11-22, replaces the map/profile drag split) | Matches the new Figma design (55:3722); gives Social and Leaderboard their own place and removes the split-drag gesture, which fought with map panning |
+| Backend project | The app can point at any Supabase project built from `supabase/migrations`; Jonathan's own `SideQuest` project (with his own Gemini key) is current as of 2026-11-22 | The shared key was throttled; the migrations and functions rebuild a working backend in a few commands. Anonymous sign-ins must be switched on in the dashboard or nothing loads |
 | Sign-in | Supabase anonymous sign-in + username; no Sign in with Apple | Nobody on the team has a paid Apple Developer account, which Sign in with Apple requires |
 | Name | Keep "Fog of War IRL" for the hackathon | Says exactly what the app does in a 3-minute pitch |
 

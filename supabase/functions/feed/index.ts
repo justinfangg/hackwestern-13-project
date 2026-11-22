@@ -45,11 +45,18 @@ Deno.serve(handle(["GET"], async (req) => {
       limit 1
     ) area on true
     -- Quest found during the session (or within 10 min of ending it: photo taken after "End").
+    -- Each find belongs to one session only: the latest one the player had started by then, so
+    -- back-to-back sessions don't all pick up the same sticker through the 10 min grace.
     left join lateral (
       select qc.sticker_url, q.category, q.place_name
       from quest_completions qc join daily_quests q on q.id = qc.quest_id
       where qc.user_id = e.user_id
         and qc.completed_at between e.started_at and e.ended_at + interval '10 minutes'
+        and not exists (
+          select 1 from expeditions later
+          where later.user_id = e.user_id
+            and later.started_at > e.started_at
+            and later.started_at <= qc.completed_at)
       order by qc.completed_at
       limit 1
     ) find on true

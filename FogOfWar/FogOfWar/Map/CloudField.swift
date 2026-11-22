@@ -1,10 +1,9 @@
-import CoreImage
 import MapKit
 import UIKit
 
-/// One cloud puff placed in world (Web Mercator) space. Positions and styling
+/// One fog bank placed in world (Web Mercator) space. Positions and styling
 /// are derived from a hash of the grid slot, so every map tile, every redraw
-/// and the dispersal animation agree on exactly the same cloud.
+/// and the dispersal animation agree on exactly the same patch of fog.
 nonisolated struct CloudSprite: Hashable, Sendable {
     struct Key: Hashable, Sendable {
         let level: Int
@@ -16,7 +15,8 @@ nonisolated struct CloudSprite: Hashable, Sendable {
     let key: Key
     let centerX: Double
     let centerY: Double
-    /// Width / height of the cloud shape (not counting blur padding), in map points.
+    /// Drawn width / height of the fog texture, in map points. The texture's
+    /// soft falloff reaches zero before its edges, so no extra padding applies.
     let width: Double
     let height: Double
     let spriteIndex: Int
@@ -26,27 +26,28 @@ nonisolated struct CloudSprite: Hashable, Sendable {
 
     var center: MKMapPoint { MKMapPoint(x: centerX, y: centerY) }
 
-    /// Drawn footprint including the blur halo baked into the sprite image.
-    var drawSize: (width: Double, height: Double) {
-        let pad = width * Double(CloudSpriteAtlas.paddingFraction) * 2
-        return (width + pad, height + pad)
-    }
+    var drawSize: (width: Double, height: Double) { (width, height) }
 
     static func == (lhs: CloudSprite, rhs: CloudSprite) -> Bool { lhs.key == rhs.key }
     func hash(into hasher: inout Hasher) { hasher.combine(key) }
 }
 
-/// Deterministic, level-of-detail cloud layout.
+/// Deterministic, level-of-detail fog layout.
 ///
-/// Level 0 is street zoom (the Figma frame: ~90 pt between crowns). Each level
-/// up doubles spacing and cloud size so the number of puffs per screen stays
-/// roughly constant as the player zooms out.
+/// Level 0 is street zoom. Each level up doubles spacing and bank size so the
+/// number of fog banks per screen stays roughly constant as the player zooms
+/// out. A low-frequency density field makes some regions thick and others
+/// barely-there wisps.
 nonisolated enum CloudField {
-    static let baseSpacingX: Double = 900
-    static let baseSpacingY: Double = 640
+    static let baseSpacingX: Double = 1_300
+    static let baseSpacingY: Double = 900
     static let maximumLevel = 16
-    /// Coarsen once level-0 clouds would sit closer than this on screen.
-    private static let minimumScreenSpacing: Double = 54
+    /// Coarsen once level-0 banks would sit closer than this on screen.
+    private static let minimumScreenSpacing: Double = 78
+
+    /// Largest bank width as a multiple of `spacing.x` (see `cloud(level:...)`).
+    private static let maximumWidthScale: Double = 2.8
+    private static let maximumHeightRatio: Double = 0.74
 
     static func level(forZoomScale zoomScale: Double) -> Int {
         guard zoomScale.isFinite, zoomScale > 0 else { return maximumLevel }
@@ -61,20 +62,20 @@ nonisolated enum CloudField {
         return (baseSpacingX * factor, baseSpacingY * factor)
     }
 
-    /// A cloud is "pushed away" once explored ground lies this close to its center.
+    /// A fog bank fades out once explored ground lies this close to its center.
+    /// Kept small relative to the (large) banks so walking past the edge of a
+    /// bank only dissolves the patch you walked through.
     static func clearRadius(level: Int) -> Double {
-        spacing(level: level).x * 0.55
+        spacing(level: level).x * 0.4
     }
 
-    /// Largest distance from a cloud center to the edge of its drawn sprite.
+    /// Largest distance from a bank center to the edge of its drawn texture.
     static func maximumDrawExtent(level: Int) -> Double {
-        let spacing = spacing(level: level)
-        let width = spacing.x * 1.75
-        let padded = width * (1 + 2 * Double(CloudSpriteAtlas.paddingFraction))
-        return padded * 0.75 + spacing.x * 0.35
+        let halfWidth = spacing(level: level).x * maximumWidthScale * 0.5
+        return hypot(halfWidth, halfWidth * maximumHeightRatio)
     }
 
-    /// Every cloud whose drawn sprite might touch `mapRect`.
+    /// Every bank whose drawn texture might touch `mapRect`.
     static func clouds(intersecting mapRect: MKMapRect, level: Int) -> [CloudSprite] {
         clouds(withCentersIn: mapRect.insetBy(
             dx: -maximumDrawExtent(level: level),
@@ -82,7 +83,7 @@ nonisolated enum CloudField {
         ), level: level)
     }
 
-    /// Every cloud whose center lies inside `mapRect`.
+    /// Every bank whose center lies inside `mapRect`.
     static func clouds(withCentersIn mapRect: MKMapRect, level: Int) -> [CloudSprite] {
         guard !mapRect.isNull, !mapRect.isEmpty else { return [] }
         let spacing = spacing(level: level)
@@ -96,10 +97,12 @@ nonisolated enum CloudField {
         guard (maxRow - minRow) * (maxColumn - minColumn) < 20_000 else { return [] }
 
         var result: [CloudSprite] = []
+        result.reserveCapacity((maxRow - minRow + 1) * (maxColumn - minColumn + 1) * 2)
         for row in minRow ... maxRow {
             for column in minColumn ... maxColumn {
-                for slot in 0 ..< 2 {
-                    guard let cloud = cloud(level: level, column: column, row: row, slot: slot),
+                let density = density(level: level, column: column, row: row)
+                for slot in 0 ..< 3 {
+                    guard let cloud = cloud(level: level, column: column, row: row, slot: slot, density: density),
                           mapRect.contains(cloud.center)
                     else { continue }
                     result.append(cloud)
@@ -109,12 +112,22 @@ nonisolated enum CloudField {
         return result
     }
 
-    private static func cloud(level: Int, column: Int, row: Int, slot: Int) -> CloudSprite? {
+    /// Smooth 0...1 fog thickness for a grid slot. Pushed towards the extremes
+    /// so the map has clearly thin patches and clearly dense ones.
+    private static func density(level: Int, column: Int, row: Int) -> Double {
+        let seed = UInt64(truncatingIfNeeded: level &* 7_919 &+ 104_729)
+        let raw = FogNoise.fbm(
+            x: Double(column) * 0.31,
+            y: Double(row) * 0.42,
+            seed: seed,
+            octaves: 3
+        )
+        return FogNoise.smoothStep(0.28, 0.72, raw)
+    }
+
+    private static func cloud(level: Int, column: Int, row: Int, slot: Int, density: Double) -> CloudSprite? {
         var random = SplitMix64(seed: seed(level: level, column: column, row: row, slot: slot))
         let spacing = spacing(level: level)
-
-        // Slot 1 is an occasional smaller puff: slight density variation.
-        if slot == 1, random.nextUnit() > 0.3 { return nil }
 
         let stagger = row.isMultiple(of: 2) ? 0 : 0.5
         var x = (Double(column) + stagger) * spacing.x
@@ -122,31 +135,47 @@ nonisolated enum CloudField {
         x += (random.nextUnit() - 0.5) * spacing.x * 0.5
         y += (random.nextUnit() - 0.5) * spacing.y * 0.45
 
-        let widthScale = slot == 0
-            ? 1.32 + random.nextUnit() * 0.36
-            : 0.85 + random.nextUnit() * 0.3
-        if slot == 1 {
-            x += (random.nextUnit() - 0.5) * spacing.x * 0.9
-            y += (random.nextUnit() - 0.5) * spacing.y * 0.9
+        let widthScale: Double
+        let heightRatio: Double
+        var opacity = 0.5 + 0.45 * density
+
+        switch slot {
+        case 0:
+            // Main bank. Thin regions drop some banks entirely so only the
+            // base haze and stray wisps remain there.
+            if density < 0.2, random.nextUnit() > 0.6 + density * 2 { return nil }
+            widthScale = 1.7 + random.nextUnit() * (maximumWidthScale - 1.7)
+            heightRatio = 0.42 + random.nextUnit() * (maximumHeightRatio - 0.42)
+            opacity *= 0.85 + random.nextUnit() * 0.15
+        case 1:
+            // Long, faint wisp drifting between banks.
+            if random.nextUnit() > 0.3 + density * 0.5 { return nil }
+            x += (random.nextUnit() - 0.5) * spacing.x * 1.2
+            y += (random.nextUnit() - 0.5) * spacing.y * 1.0
+            widthScale = 1.2 + random.nextUnit() * 0.9
+            heightRatio = 0.32 + random.nextUnit() * 0.22
+            opacity *= 0.7 + random.nextUnit() * 0.2
+        default:
+            // Small dense knot that only forms where fog is already thick.
+            if random.nextUnit() > density * 0.65 { return nil }
+            x += (random.nextUnit() - 0.5) * spacing.x * 0.8
+            y += (random.nextUnit() - 0.5) * spacing.y * 0.8
+            widthScale = 0.9 + random.nextUnit() * 0.5
+            heightRatio = 0.5 + random.nextUnit() * 0.22
+            opacity *= 0.85 + random.nextUnit() * 0.15
         }
 
-        let spriteIndex = Int(random.next() % UInt64(CloudSpriteAtlas.names.count))
         let width = spacing.x * widthScale
-        let height = width * CloudSpriteAtlas.aspectRatios[spriteIndex] * (0.92 + random.nextUnit() * 0.16)
-        let opacity = CGFloat(0.8 + random.nextUnit() * 0.17)
-        let flipped = random.nextUnit() < 0.5
-        let rotation = CGFloat((random.nextUnit() - 0.5) * 0.22)
-
         return CloudSprite(
             key: .init(level: level, column: column, row: row, slot: slot),
             centerX: x,
             centerY: y,
             width: width,
-            height: height,
-            spriteIndex: spriteIndex,
-            opacity: opacity,
-            isFlipped: flipped,
-            rotation: rotation
+            height: width * heightRatio,
+            spriteIndex: Int(random.next() % UInt64(CloudSpriteAtlas.spriteCount)),
+            opacity: CGFloat(min(max(opacity, 0.1), 0.95)),
+            isFlipped: random.nextUnit() < 0.5,
+            rotation: CGFloat((random.nextUnit() - 0.5) * 0.5)
         )
     }
 
@@ -178,36 +207,67 @@ nonisolated struct SplitMix64 {
     }
 }
 
-/// The Figma "Cloud crown" vectors, rasterised once with the layer blur the
-/// design applies. Shared by the tile renderer and the dispersal animation.
+/// Hash-based value noise; deterministic and allocation-free.
+nonisolated enum FogNoise {
+    static func smoothStep(_ edge0: Double, _ edge1: Double, _ value: Double) -> Double {
+        let t = min(max((value - edge0) / (edge1 - edge0), 0), 1)
+        return t * t * (3 - 2 * t)
+    }
+
+    private static func lattice(_ x: Int, _ y: Int, _ seed: UInt64) -> Double {
+        var h = seed ^ (UInt64(bitPattern: Int64(x)) &* 0x9E37_79B9_7F4A_7C15)
+        h ^= UInt64(bitPattern: Int64(y)) &* 0xC2B2_AE3D_27D4_EB4F
+        h = (h ^ (h >> 31)) &* 0xBF58_476D_1CE4_E5B9
+        h = (h ^ (h >> 29)) &* 0x94D0_49BB_1331_11EB
+        h ^= h >> 32
+        return Double(h >> 11) / Double(1 << 53)
+    }
+
+    /// Smoothly interpolated value noise in [0, 1).
+    static func value(x: Double, y: Double, seed: UInt64) -> Double {
+        let x0 = floor(x), y0 = floor(y)
+        let ix = Int(x0), iy = Int(y0)
+        let fx = x - x0, fy = y - y0
+        let sx = fx * fx * (3 - 2 * fx)
+        let sy = fy * fy * (3 - 2 * fy)
+        let a = lattice(ix, iy, seed)
+        let b = lattice(ix + 1, iy, seed)
+        let c = lattice(ix, iy + 1, seed)
+        let d = lattice(ix + 1, iy + 1, seed)
+        let top = a + (b - a) * sx
+        let bottom = c + (d - c) * sx
+        return top + (bottom - top) * sy
+    }
+
+    /// Fractal sum of value noise, normalised to [0, 1).
+    static func fbm(x: Double, y: Double, seed: UInt64, octaves: Int) -> Double {
+        var sum = 0.0, amplitude = 0.5, frequency = 1.0, norm = 0.0
+        for octave in 0 ..< octaves {
+            sum += amplitude * value(x: x * frequency, y: y * frequency, seed: seed &+ UInt64(octave) &* 0x632B_E59B)
+            norm += amplitude
+            amplitude *= 0.5
+            frequency *= 2.03
+        }
+        return sum / norm
+    }
+}
+
+/// Small, procedurally generated fog textures shared by the tile renderer and
+/// the dispersal fade. Each one is a cluster of soft lobes eroded by fractal
+/// noise, so edges break up into wisps instead of reading as cartoon clouds.
+/// Generating them is a few milliseconds of arithmetic: no asset decoding,
+/// SVG rasterisation or Core Image blur.
 nonisolated final class CloudSpriteAtlas: @unchecked Sendable {
     static let shared = CloudSpriteAtlas()
-
-    static let names = [
-        "CloudCrown07", "CloudCrown08", "CloudCrown09", "CloudCrown10",
-        "CloudCrown11", "CloudCrown12", "CloudCrown13", "CloudCrown14"
-    ]
-
-    /// Height / width of each crown's Figma frame.
-    static let aspectRatios: [Double] = [
-        104.818 / 119.385, 107.177 / 109.572, 112.542 / 137.166, 112.426 / 140.584,
-        110.217 / 127.465, 93.6022 / 121.844, 93.5105 / 139.482, 95.6573 / 119.779
-    ]
-
-    /// Transparent margin (fraction of the shape width) on every side that
-    /// leaves room for the blur to fall off.
-    static let paddingFraction: CGFloat = 0.3
-    /// Gaussian sigma as a fraction of the shape width (Figma layer blur).
-    private static let blurFraction: CGFloat = 0.075
-    private static let shapePixelWidth: CGFloat = 220
+    static let spriteCount = 10
+    /// Fog is soft, so a low-resolution texture scaled up looks identical and
+    /// is far cheaper to draw than the previous blurred vector sprites.
+    private static let pixelSize = 96
 
     let images: [CGImage?]
 
     private init() {
-        let context = CIContext(options: [.useSoftwareRenderer: false])
-        images = Self.names.indices.map { index in
-            Self.renderSprite(named: Self.names[index], aspect: Self.aspectRatios[index], context: context)
-        }
+        images = (0 ..< Self.spriteCount).map { Self.renderSprite(index: $0) }
     }
 
     func image(at index: Int) -> CGImage? {
@@ -215,27 +275,94 @@ nonisolated final class CloudSpriteAtlas: @unchecked Sendable {
         return images[index]
     }
 
-    private static func renderSprite(named name: String, aspect: Double, context: CIContext) -> CGImage? {
-        guard let vector = UIImage(named: name) else { return nil }
+    private struct Lobe {
+        let x: Double
+        let y: Double
+        let inverseRadiusSquared: Double
+        let weight: Double
+    }
 
-        let shapeWidth = shapePixelWidth
-        let shapeHeight = (shapeWidth * aspect).rounded()
-        let pad = (shapeWidth * paddingFraction).rounded()
-        let canvas = CGSize(width: shapeWidth + pad * 2, height: shapeHeight + pad * 2)
+    private static func renderSprite(index: Int) -> CGImage? {
+        let size = pixelSize
+        let seed = UInt64(index + 1) &* 0xD1B5_4A32_D192_ED03
+        var random = SplitMix64(seed: seed)
 
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = false
-        let flat = UIGraphicsImageRenderer(size: canvas, format: format).image { _ in
-            vector.draw(in: CGRect(x: pad, y: pad, width: shapeWidth, height: shapeHeight))
+        // Lobes spread along a horizontal band; the field stretches them
+        // further when it sets each bank's width and height.
+        // Many overlapping lobes make each texture read as one big bunch.
+        let lobeCount = 8 + Int(random.next() % 6)
+        var lobes: [Lobe] = []
+        for _ in 0 ..< lobeCount {
+            let radius = 0.1 + random.nextUnit() * 0.11
+            lobes.append(Lobe(
+                x: (random.nextUnit() - 0.5) * 0.58,
+                y: (random.nextUnit() - 0.5) * 0.36,
+                inverseRadiusSquared: 1 / (radius * radius),
+                weight: 0.45 + random.nextUnit() * 0.55
+            ))
         }
-        guard let flatCG = flat.cgImage else { return nil }
+        let noiseScale = 1.8 + random.nextUnit() * 1.4
+        let noiseOffsetX = random.nextUnit() * 100
+        let noiseOffsetY = random.nextUnit() * 100
+        let erosion = 0.3 + random.nextUnit() * 0.25
 
-        let input = CIImage(cgImage: flatCG)
-        guard let blur = CIFilter(name: "CIGaussianBlur") else { return flatCG }
-        blur.setValue(input.clampedToExtent(), forKey: kCIInputImageKey)
-        blur.setValue(shapeWidth * blurFraction, forKey: kCIInputRadiusKey)
-        guard let output = blur.outputImage?.cropped(to: input.extent) else { return flatCG }
-        return context.createCGImage(output, from: input.extent) ?? flatCG
+        // Slightly warm grey: lighter in thick cores, darker in thin edges.
+        let light: (r: Double, g: Double, b: Double) = (0.85, 0.85, 0.84)
+        let dark: (r: Double, g: Double, b: Double) = (0.77, 0.77, 0.76)
+
+        var pixels = [UInt8](repeating: 0, count: size * size * 4)
+        for py in 0 ..< size {
+            let v = (Double(py) + 0.5) / Double(size) - 0.5
+            for px in 0 ..< size {
+                let u = (Double(px) + 0.5) / Double(size) - 0.5
+
+                var body = 0.0
+                for lobe in lobes {
+                    let dx = u - lobe.x, dy = v - lobe.y
+                    body += lobe.weight * exp(-(dx * dx + dy * dy) * lobe.inverseRadiusSquared)
+                }
+
+                let noise = FogNoise.fbm(
+                    x: u * noiseScale + noiseOffsetX,
+                    // Higher vertical frequency streaks the fog sideways.
+                    y: v * noiseScale * 2.4 + noiseOffsetY,
+                    seed: seed,
+                    octaves: 3
+                )
+                var alpha = body * (1 - erosion + erosion * 2 * noise)
+                alpha = FogNoise.smoothStep(0.04, 0.95, alpha)
+
+                // Force a clean fade to zero before the texture edge.
+                let radial = hypot(u, v) * 2
+                alpha *= 1 - FogNoise.smoothStep(0.72, 0.98, radial)
+                guard alpha > 0.002 else { continue }
+
+                let shade = min(max(alpha * 0.7 - v * 0.3 + noise * 0.15, 0), 1)
+                let r = dark.r + (light.r - dark.r) * shade
+                let g = dark.g + (light.g - dark.g) * shade
+                let b = dark.b + (light.b - dark.b) * shade
+
+                let offset = (py * size + px) * 4
+                pixels[offset] = UInt8(min(r * alpha * 255, 255))
+                pixels[offset + 1] = UInt8(min(g * alpha * 255, 255))
+                pixels[offset + 2] = UInt8(min(b * alpha * 255, 255))
+                pixels[offset + 3] = UInt8(min(alpha * 255, 255))
+            }
+        }
+
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(
+            width: size,
+            height: size,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: size * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: true,
+            intent: .defaultIntent
+        )
     }
 }

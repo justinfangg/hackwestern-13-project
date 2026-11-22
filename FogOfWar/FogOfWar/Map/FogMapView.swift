@@ -64,6 +64,7 @@ struct FogMapView: UIViewRepresentable {
         private var renderedRouteColor: UIColor?
         private weak var mapView: MKMapView?
         private weak var dispersalView: CloudDispersalView?
+        private weak var blurView: FogBlurView?
 
         init(parent: FogMapView) {
             self.parent = parent
@@ -75,6 +76,7 @@ struct FogMapView: UIViewRepresentable {
             let mapView = container.mapView
             self.mapView = mapView
             dispersalView = container.dispersalView
+            blurView = container.blurView
             mapView.delegate = self
             mapView.accessibilityLabel = "Exploration map"
             mapView.accessibilityHint = "Pan and pinch to explore. Unexplored places are covered by clouds."
@@ -170,6 +172,7 @@ struct FogMapView: UIViewRepresentable {
             guard let fogRenderer else { return }
             let geometries = parent.clearedCells.compactMap { try? parent.tileMath.geometry(for: $0) }
             fogRenderer.setClearedGeometries(geometries)
+            blurView?.explorationDidChange(animated: false)
             renderedCells = parent.clearedCells
             lastRenderedChangeID = parent.latestChange?.id
         }
@@ -182,6 +185,7 @@ struct FogMapView: UIViewRepresentable {
             if desiredCells.isEmpty {
                 fogRenderer.reset()
                 dispersalView?.removeAllPuffs()
+                blurView?.explorationDidChange(animated: false)
                 renderedCells = []
                 lastRenderedChangeID = parent.latestChange?.id
                 return
@@ -207,9 +211,11 @@ struct FogMapView: UIViewRepresentable {
                     style: .normal
                 )
                 dispersalView?.disperse(dispersed, awayFrom: origin)
+                blurView?.explorationDidChange(animated: true)
             } else {
                 let geometries = desiredCells.compactMap { try? parent.tileMath.geometry(for: $0) }
                 fogRenderer.setClearedGeometries(geometries)
+                blurView?.explorationDidChange(animated: false)
             }
 
             renderedCells = desiredCells
@@ -375,7 +381,18 @@ struct FogMapView: UIViewRepresentable {
             let renderer = FogRenderer(overlay: overlay)
             renderer.visibleMapRectProvider = { [weak mapView] in mapView?.visibleMapRect }
             fogRenderer = renderer
+            blurView?.clearedGeometriesProvider = { [weak renderer] rect in
+                renderer?.clearedGeometries(intersecting: rect) ?? []
+            }
             return renderer
+        }
+
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            blurView?.mapDidMove()
+        }
+
+        func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
+            blurView?.mapDidMove()
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
@@ -423,9 +440,10 @@ struct FogMapView: UIViewRepresentable {
     }
 }
 
-/// Hosts the map with the cloud-dispersal effect layered on top.
+/// Hosts the map with the fog blur and the fog-fade effect layered on top.
 final class FogMapContainerView: UIView {
     let mapView = MKMapView(frame: .zero)
+    let blurView = FogBlurView()
     let dispersalView = CloudDispersalView()
 
     override init(frame: CGRect) {
@@ -433,6 +451,11 @@ final class FogMapContainerView: UIView {
         mapView.frame = bounds
         mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(mapView)
+
+        blurView.frame = bounds
+        blurView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        blurView.mapView = mapView
+        addSubview(blurView)
 
         dispersalView.frame = bounds
         dispersalView.autoresizingMask = [.flexibleWidth, .flexibleHeight]

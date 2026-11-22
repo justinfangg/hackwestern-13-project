@@ -2,24 +2,20 @@ import MapKit
 import QuartzCore
 import UIKit
 
-/// Short-lived layer that plays the "pushing the clouds aside" effect.
+/// Short-lived layer that fades out fog the player has just walked into.
 ///
-/// When exploration clears ground under a cloud, the tile renderer stops
-/// drawing it and hands the cloud to this view, which slides it away from the
-/// player with a critically damped spring, swells it slightly, then lets it
-/// fade out. Positions are tracked in map space every frame so the puffs stay
-/// glued to the map while the player pans or zooms mid-animation.
+/// When exploration clears ground under a fog bank, the tile renderer stops
+/// drawing it and hands the bank to this view, which keeps it exactly where it
+/// was and dissolves it. Positions are tracked in map space every frame so the
+/// fading fog stays glued to the map while the player pans or zooms.
 final class CloudDispersalView: UIView {
     weak var mapView: MKMapView?
 
     private struct Puff {
         let cloud: CloudSprite
         let layer: CALayer
-        let directionX: Double
-        let directionY: Double
-        let distance: Double
-        let swirl: CGFloat
         let startTime: CFTimeInterval
+        let duration: CFTimeInterval
     }
 
     private let appearance: FogAppearance
@@ -43,6 +39,8 @@ final class CloudDispersalView: UIView {
         displayLink?.invalidate()
     }
 
+    /// `origin` only staggers the fade slightly so fog nearest the player
+    /// dissolves first; nothing moves.
     func disperse(_ clouds: [CloudSprite], awayFrom origin: CLLocationCoordinate2D) {
         guard !clouds.isEmpty else { return }
         let originPoint = MKMapPoint(origin)
@@ -53,34 +51,22 @@ final class CloudDispersalView: UIView {
             guard let image = atlas.image(at: cloud.spriteIndex) else { continue }
             var random = SplitMix64(seed: UInt64(bitPattern: Int64(cloud.key.hashValue)))
 
-            var dx = cloud.centerX - originPoint.x
-            var dy = cloud.centerY - originPoint.y
-            var length = hypot(dx, dy)
-            if length < 1 {
-                let angle = random.nextUnit() * .pi * 2
-                dx = cos(angle)
-                dy = sin(angle)
-                length = 1
-            }
-            // Fan the push out a little so neighbouring clouds don't move in lockstep.
-            let wobble = (random.nextUnit() - 0.5) * 0.6
-            let baseAngle = atan2(dy / length, dx / length) + wobble
+            let distance = hypot(cloud.centerX - originPoint.x, cloud.centerY - originPoint.y)
+            let normalized = min(distance / max(cloud.width, 1), 1)
+            let delay = reduceMotion ? 0 : normalized * appearance.dispersalMaximumStagger
+            let duration = reduceMotion
+                ? 0.25
+                : appearance.dispersalFadeDuration * (0.85 + random.nextUnit() * 0.3)
 
             let layer = CALayer()
             layer.contents = image
             layer.contentsGravity = .resize
+            layer.minificationFilter = .linear
+            layer.magnificationFilter = .linear
             layer.actions = ["position": NSNull(), "bounds": NSNull(), "opacity": NSNull(), "transform": NSNull()]
             self.layer.addSublayer(layer)
 
-            puffs.append(Puff(
-                cloud: cloud,
-                layer: layer,
-                directionX: cos(baseAngle),
-                directionY: sin(baseAngle),
-                distance: reduceMotion ? 0 : cloud.width * (0.75 + random.nextUnit() * 0.35),
-                swirl: CGFloat((random.nextUnit() - 0.5) * 0.25),
-                startTime: now
-            ))
+            puffs.append(Puff(cloud: cloud, layer: layer, startTime: now + delay, duration: duration))
         }
 
         updatePuffs(at: now)
@@ -115,35 +101,30 @@ final class CloudDispersalView: UIView {
         let visible = mapView.visibleMapRect
         guard visible.size.width > 0 else { return }
         let scale = Double(bounds.width) / visible.size.width
-        let totalDuration = appearance.dispersalFadeDelay + appearance.dispersalFadeDuration
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
 
         puffs.removeAll { puff in
-            let elapsed = max(time - puff.startTime, 0)
-            guard elapsed < totalDuration else {
+            let phase = min(max((time - puff.startTime) / puff.duration, 0), 1)
+            guard phase < 1 else {
                 puff.layer.removeFromSuperlayer()
                 return true
             }
 
-            // Critically damped spring: fast initial shove that eases to rest.
-            let omega = 5.2 / appearance.dispersalPushDuration
-            let push = 1 - (1 + omega * elapsed) * exp(-omega * elapsed)
-            let fadePhase = min(max((elapsed - appearance.dispersalFadeDelay) / appearance.dispersalFadeDuration, 0), 1)
-            let fade = 1 - fadePhase * fadePhase * (3 - 2 * fadePhase)
-
-            let worldX = puff.cloud.centerX + puff.directionX * puff.distance * push
-            let worldY = puff.cloud.centerY + puff.directionY * puff.distance * push
+            // Ease-in-out so the fog thins gently, then vanishes.
+            let fade = 1 - phase * phase * (3 - 2 * phase)
             let size = puff.cloud.drawSize
-            let swell = 1 + 0.14 * push
 
             puff.layer.bounds = CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale)
-            puff.layer.position = CGPoint(x: (worldX - visible.minX) * scale, y: (worldY - visible.minY) * scale)
+            puff.layer.position = CGPoint(
+                x: (puff.cloud.centerX - visible.minX) * scale,
+                y: (puff.cloud.centerY - visible.minY) * scale
+            )
             puff.layer.opacity = Float(puff.cloud.opacity * CGFloat(fade))
 
-            var transform = CATransform3DMakeRotation(puff.cloud.rotation + puff.swirl * CGFloat(push), 0, 0, 1)
-            transform = CATransform3DScale(transform, (puff.cloud.isFlipped ? -1 : 1) * swell, swell, 1)
+            var transform = CATransform3DMakeRotation(puff.cloud.rotation, 0, 0, 1)
+            transform = CATransform3DScale(transform, puff.cloud.isFlipped ? -1 : 1, 1, 1)
             puff.layer.transform = transform
             return false
         }

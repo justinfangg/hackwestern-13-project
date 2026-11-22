@@ -7,9 +7,9 @@ import UIKit
 /// conversion happen before geometry reaches this type; draw calls only query a
 /// spatial index and issue Core Graphics commands for the dirty map rectangle.
 ///
-/// Layers per tile: a light haze, the blurred Figma cloud crowns (skipping any
-/// cloud whose center sits on explored ground), then a soft punch-out of every
-/// cleared H3 cell so walked paths are always readable.
+/// Layers per tile: a grey haze, procedural fog banks of varying density
+/// (skipping any bank whose center sits on explored ground), then a soft
+/// punch-out of every cleared H3 cell so walked paths are always readable.
 final class FogRenderer: MKOverlayRenderer {
     /// Supplied by `FogMapView.Coordinator`; used when a dirty rect is unknown.
     @MainActor var visibleMapRectProvider: (() -> MKMapRect?)?
@@ -55,6 +55,12 @@ final class FogRenderer: MKOverlayRenderer {
         stateLock.fogWithLock { lastDrawnCloudLevel }
     }
 
+    /// Cleared cells touching `mapRect`; used to cut explored ground out of
+    /// the blur that sits under the fog.
+    func clearedGeometries(intersecting mapRect: MKMapRect) -> [CellGeometry] {
+        stateLock.fogWithLock { clearedIndex.geometries(intersecting: mapRect) }
+    }
+
     /// Replaces the complete persisted cleared-cell snapshot without animating
     /// it. This is the startup/restore path and intentionally invalidates once.
     @MainActor
@@ -70,7 +76,7 @@ final class FogRenderer: MKOverlayRenderer {
 
     /// Incrementally adds newly cleared cells and schedules their presentation
     /// animation. Returns the clouds that were visible before this reveal and
-    /// are now on explored ground, so the caller can animate them away.
+    /// are now on explored ground, so the caller can fade them out in place.
     @MainActor
     @discardableResult
     func reveal(
@@ -214,13 +220,15 @@ final class FogRenderer: MKOverlayRenderer {
         context: CGContext
     ) {
         guard !clouds.isEmpty else { return }
-        let clearRadius = CloudField.clearRadius(level: level)
+        let clearCircles = Self.clearCircles(for: cleared, clearRadius: CloudField.clearRadius(level: level))
 
         context.saveGState()
         context.clip(to: clip)
+        // Fog textures are soft and low-resolution; bilinear is plenty.
+        context.interpolationQuality = .low
         for cloud in clouds {
             guard let image = atlas.image(at: cloud.spriteIndex),
-                  !Self.isCloudCleared(cloud, clearRadius: clearRadius, among: cleared)
+                  !Self.isCloudCleared(cloud, among: clearCircles)
             else { continue }
 
             let size = cloud.drawSize
@@ -307,22 +315,36 @@ final class FogRenderer: MKOverlayRenderer {
             width: probe * 2,
             height: probe * 2
         ))
-        return Self.isCloudCleared(cloud, clearRadius: clearRadius, among: nearby)
+        return Self.isCloudCleared(cloud, among: Self.clearCircles(for: nearby, clearRadius: clearRadius))
     }
 
-    /// A cloud gets pushed aside once any explored cell is within the clear
-    /// radius of its center (or the center sits inside that cell).
-    private static func isCloudCleared(
-        _ cloud: CloudSprite,
-        clearRadius: Double,
-        among geometries: [CellGeometry]
-    ) -> Bool {
-        for geometry in geometries {
+    struct ClearCircle {
+        let x: Double
+        let y: Double
+        let radiusSquared: Double
+    }
+
+    /// Flattens cleared cells into plain circles once per draw so the
+    /// per-cloud test is a tight loop over doubles.
+    static func clearCircles(for geometries: [CellGeometry], clearRadius: Double) -> [ClearCircle] {
+        geometries.map { geometry in
             let cellRadius = max(geometry.mapRect.size.width, geometry.mapRect.size.height) * 0.5
             let radius = max(clearRadius, cellRadius)
-            let dx = geometry.centerMapPoint.x - cloud.centerX
-            let dy = geometry.centerMapPoint.y - cloud.centerY
-            if dx * dx + dy * dy < radius * radius {
+            return ClearCircle(
+                x: geometry.centerMapPoint.x,
+                y: geometry.centerMapPoint.y,
+                radiusSquared: radius * radius
+            )
+        }
+    }
+
+    /// A fog bank fades out once any explored cell is within the clear
+    /// radius of its center (or the center sits inside that cell).
+    static func isCloudCleared(_ cloud: CloudSprite, among circles: [ClearCircle]) -> Bool {
+        for circle in circles {
+            let dx = circle.x - cloud.centerX
+            let dy = circle.y - cloud.centerY
+            if dx * dx + dy * dy < circle.radiusSquared {
                 return true
             }
         }

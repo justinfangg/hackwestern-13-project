@@ -11,7 +11,7 @@ import FogKit
 
 enum SupabaseConfig {
     static let backend = BackendConfig(
-        projectURL: URL(string: "https://febubbwoyptplfnsdqkv.supabase.co")!,
-        anonKey: "sb_publishable_D9e6XtBhXyMp9MaNwzwFqw_lyTraFUu"
+        projectURL: URL(string: "https://qsxakuynoyxsyxhkxvuo.supabase.co")!,
+        anonKey: "sb_publishable_EUUcwKCKsR2RDm091M_Zuw_0A3l1r7E"
     )
 }
